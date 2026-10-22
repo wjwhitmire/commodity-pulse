@@ -2,7 +2,7 @@
 
 Commodity Pulse is a free monthly commodity price dashboard built on the World Bank Commodity Price Data (the "Pink Sheet"). It covers energy, metals, agriculture and fertilizers, with monthly history back to 1960. For each series it shows the latest price, the month-over-month and year-over-year change, a 12-month z-score, and the percentile against the series' own history. It also shows the largest movers, a line chart of up to four series with an optional rebase to 100, and the spreads that matter: Brent minus WTI, Europe gas against US gas, urea against gas, and gold against silver.
 
-Live tool: {{LIVE_URL}}
+Live tool: https://wjwhitmire.github.io/commodity-pulse/
 
 There are no servers and no cost. A weekly GitHub Actions job downloads the World Bank workbook, rebuilds `data/`, and commits only when a new release appears ("git scraping"). GitHub Pages serves the dashboard and the data from the same repo.
 
@@ -26,7 +26,7 @@ The code in this repo is MIT licensed. The data in `data/` and `docs/data/` stay
 2. Settings, Pages: Source "Deploy from a branch", branch `main`, folder `/docs`.
 3. Settings, Actions, General, Workflow permissions: leave "Read repository contents" as the default. The collect workflow asks for `contents: write` on its own job.
 4. Actions tab: enable workflows if GitHub asks, then run "collect" once with "Run workflow". The first run replaces the seed data with the full history and commits it.
-5. Replace `{{LIVE_URL}}` in this README with the Pages URL.
+5. Replace `https://wjwhitmire.github.io/commodity-pulse/` in this README with the Pages URL.
 
 The workflow then runs every Wednesday at 09:17 UTC. The World Bank usually publishes on the second business day of the month, so a new release shows up within a week.
 
