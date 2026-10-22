@@ -1,0 +1,44 @@
+name: collect
+
+# Weekly: download the World Bank monthly workbook, rebuild data/ and docs/,
+# and commit only if the release or the data changed.
+on:
+  schedule:
+    - cron: "17 9 * * 3"   # Wednesdays 09:17 UTC (World Bank releases on the 2nd business day)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Collect
+        run: commodity-pulse collect --out data
+      - name: Rebuild pages
+        run: python web/build_pages.py
+      - name: Commit if changed
+        run: |
+          git add data docs
+          if git diff --cached --quiet; then
+            echo "No new release. Nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          release=$(python -c "import json;print(json.load(open('data/meta.json')).get('release') or 'unknown')")
+          git commit -m "Data: World Bank Pink Sheet release ${release}"
+          git push

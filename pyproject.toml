@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "commodity_pulse"
+version = "1.0.0"
+description = "Free monthly commodity price dashboard and analytics on World Bank Pink Sheet data."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Will Whitmire" }]
+requires-python = ">=3.10"
+dependencies = ["openpyxl>=3.1"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Office/Business :: Financial",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+commodity-pulse = "commodity_pulse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

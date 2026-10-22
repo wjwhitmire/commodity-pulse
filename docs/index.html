@@ -1,0 +1,1600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Free monthly commodity price dashboard on World Bank Pink Sheet data: movers, z-scores, percentiles, spreads.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Commodity Pulse</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@700;900&family=Figtree:wght@400;600&family=Azeret+Mono:wght@400;600&display=swap">
+<style>
+/* Commodity Pulse, Field Tools No. 11: the exchange price board. Light is the salmon commodity page,
+   dark is the floor board at night with amber lamps. Single column: ticker header, data, movers, chart, spreads.
+   Chart series: slot 1 --chart-1, slot 2 --chart-4, slots 3 and 4 local --series-3/--series-4.
+   All four validated together (all pairs, Machado CVD sim) on --field: light worst CVD dE 16.1, dark 10.0. */
+:root {
+  --bg: #f1d7c3; --surface: #fcefe5; --surface-2: #f6e0d0; --hair: #e2c3ad; --line: #7a6658;
+  --fg: #1a1210; --muted: #4f3f36; --accent: #1a1210; --accent-ink: #fcefe5;
+  --mark: #b0141d; --good: #0f6a35; --warn: #7a4a00; --bad: #98111a;
+  --field: #fff6ef; --chart-1: #1a1210; --chart-2: #b0141d; --chart-3: #0f6a35; --chart-4: #2f5aa0; --chart-grid: #ebcdb8;
+  --series-3: #a14f09; --series-4: #aa63fc; --title: #1a1210;
+  --display: "Doto", "Courier New", "DejaVu Sans Mono", monospace;
+  --body: "Figtree", "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", sans-serif;
+  --mono: "Azeret Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #050505; --surface: #0e0e0e; --surface-2: #171717; --hair: #262626; --line: #7a7a7a;
+  --fg: #f2f2f2; --muted: #b3b3b3; --accent: #ffb000; --accent-ink: #1a1100;
+  --mark: #ff5c5c; --good: #5fdc8a; --warn: #ffd166; --bad: #ff7a6b;
+  --field: #0a0a0a; --chart-1: #ffb000; --chart-2: #ff5c5c; --chart-3: #f2f2f2; --chart-4: #5fdc8a; --chart-grid: #262626;
+  --series-3: #3b86d4; --series-4: #954a7e; --title: #ffb000;
+  --display: "Doto", "Courier New", "DejaVu Sans Mono", monospace;
+  --body: "Figtree", "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", sans-serif;
+  --mono: "Azeret Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #050505; --surface: #0e0e0e; --surface-2: #171717; --hair: #262626; --line: #7a7a7a;
+  --fg: #f2f2f2; --muted: #b3b3b3; --accent: #ffb000; --accent-ink: #1a1100;
+  --mark: #ff5c5c; --good: #5fdc8a; --warn: #ffd166; --bad: #ff7a6b;
+  --field: #0a0a0a; --chart-1: #ffb000; --chart-2: #ff5c5c; --chart-3: #f2f2f2; --chart-4: #5fdc8a; --chart-grid: #262626;
+  --series-3: #3b86d4; --series-4: #954a7e; --title: #ffb000;
+  --display: "Doto", "Courier New", "DejaVu Sans Mono", monospace;
+  --body: "Figtree", "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", sans-serif;
+  --mono: "Azeret Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  color-scheme: dark; }
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.5; }
+.wrap {
+  max-width: 1040px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 40px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.wrap > * { min-width: 0; }
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Header: a ticker row of board cells, then the name in lamp figures */
+header.strip { display: flex; flex-direction: column; gap: 0; }
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--fg); background: var(--surface); margin: 0 0 12px; font: 600 13px/1.3 var(--mono); }
+.board span { padding: 6px 8px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.board span + span { border-left: 1px solid var(--fg); }
+.board i { font-style: normal; font-weight: 400; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.board b { font-weight: 600; text-transform: uppercase; overflow-wrap: anywhere; }
+h1 { font: 900 2.4rem/1 var(--display); letter-spacing: .04em; margin: 0 0 6px; text-transform: uppercase; color: var(--title); }
+.lede { margin: 0; color: var(--muted); max-width: 70ch; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; border-bottom: 1px solid var(--fg); padding-bottom: 8px; }
+h2 { font: 600 15px/1.2 var(--mono); margin: 0; letter-spacing: .1em; text-transform: uppercase; }
+h3 { font: 600 13px/1.3 var(--mono); margin: 0; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hint { color: var(--muted); font-size: 16px; margin: 0; max-width: 75ch; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+input, select, textarea, button { font: inherit; color: inherit; }
+select, textarea {
+  background: var(--field); border: 1px solid var(--line); border-radius: 0;
+  padding: 8px 10px; min-width: 0; width: 100%; font-size: 16px;
+}
+select { min-height: 44px; font-family: var(--body); text-overflow: ellipsis; }
+textarea { font-family: var(--mono); font-size: 14px; resize: vertical; }
+button {
+  min-height: 44px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 0;
+  padding: 8px 14px; cursor: pointer; line-height: 1.3; font: 600 14px var(--mono); letter-spacing: .04em;
+}
+button:hover { border-color: var(--fg); }
+button:disabled { cursor: default; opacity: .55; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.link {
+  min-height: 44px; display: inline-flex; align-items: center; background: none; border-color: transparent; color: var(--fg);
+  padding: 0; text-align: left; font: 600 16px/1.3 var(--body); letter-spacing: 0;
+  text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px;
+}
+button.link:hover { text-decoration-color: currentColor; }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input[type="file"] { font-size: 15px; max-width: 100%; min-height: 44px; }
+input[type="checkbox"] { accent-color: var(--accent); width: 20px; height: 20px; margin: 0; }
+a { color: var(--fg); text-decoration-color: var(--line); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label, .lbl { font-size: 15px; font-weight: 600; color: var(--fg); }
+.check { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 16px; font-weight: 400 !important; }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--fg); color: var(--fg); background: var(--field); padding: 4px 8px; }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
+.chip.bad { border-color: var(--bad); color: var(--bad); }
+.chip.good { border-color: var(--good); color: var(--good); }
+.chip.muted { border-color: var(--line); color: var(--muted); }
+.status { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; }
+.status .chip + .chip { border-left: 0; }
+.banner { border: 1px solid var(--warn); background: var(--field); color: var(--fg); padding: 10px 12px; font-size: 16px; }
+.banner.bad { border-color: var(--bad); }
+.msg { font-size: 16px; margin: 0; }
+.msg.err { color: var(--bad); }
+
+/* Tabs: board section selector */
+.tabs { display: flex; gap: 0; border: 1px solid var(--fg); background: var(--field); overflow-x: auto; scrollbar-width: thin; }
+.tabs button {
+  border: 0; border-radius: 0; background: none; padding: 8px 14px; flex: 0 0 auto;
+  font: 600 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap;
+}
+.tabs button + button { border-left: 1px solid var(--hair); }
+.tabs button[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); }
+.tabs .count { font-family: var(--mono); font-size: 12px; margin-left: 6px; font-weight: 400; }
+
+/* Tables: quote sheet */
+.scroll { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); background: var(--field); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 10px; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+thead th { background: var(--surface-2); font: 600 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; border-bottom: 1px solid var(--fg); padding-block: 8px; }
+td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.u { color: var(--muted); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+table.movers { min-width: 760px; }
+table.movers td:first-child { min-width: 11rem; }
+tbody tr:hover td { background: var(--surface-2); }
+.dir { display: inline-block; width: 1em; text-align: center; color: var(--muted); }
+.pbar { display: inline-block; position: relative; width: 52px; height: 6px; background: var(--hair); vertical-align: middle; margin-right: 8px; }
+.pbar i { position: absolute; top: -3px; width: 3px; height: 12px; background: var(--accent); }
+
+/* Top movers: two quote columns. The first month-over-month mover is the lit figure on the board. */
+.tops { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
+.tops > div { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+ol.top { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border: 1px solid var(--line); background: var(--field); counter-reset: rank; }
+ol.top li { display: grid; grid-template-columns: 1.8rem minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 2px 10px; border-top: 1px solid var(--hair); counter-increment: rank; }
+ol.top li:first-child { border-top: 0; }
+ol.top li::before { content: counter(rank); font: 600 13px var(--mono); color: var(--muted); }
+ol.top .nm { min-width: 0; overflow-wrap: anywhere; }
+ol.top .meta { display: block; color: var(--muted); font-size: 13px; font-family: var(--mono); font-variant-numeric: tabular-nums; padding-bottom: 6px; }
+ol.top .chg { font: 600 15px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+#top-mom li:first-child { grid-template-columns: 1.8rem minmax(0, 1fr); background: var(--surface); outline: 1px solid var(--fg); outline-offset: -1px; padding: 8px 12px 10px; }
+#top-mom li:first-child .chg { grid-column: 1 / -1; text-align: left; font: 900 40px/1.05 var(--display); color: var(--mark); letter-spacing: .02em; padding-top: 2px; }
+
+/* Chart */
+.ctrls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 12px; }
+.swatch { display: inline-block; width: 14px; height: 4px; vertical-align: middle; margin-right: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 15px; }
+.legend span { display: inline-flex; align-items: center; }
+.chart-box { position: relative; min-width: 0; background: var(--field); border: 1px solid var(--line); padding: 6px 4px; }
+.chart-box svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg .ax { fill: var(--muted); font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .grid { stroke: var(--chart-grid); stroke-width: 1; }
+svg .base { stroke: var(--line); stroke-width: 1; }
+svg .ref { stroke: var(--chart-3); stroke-width: 1; stroke-dasharray: 3 3; }
+svg .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg .dl { font-family: var(--body); font-size: 12px; fill: var(--fg); }
+svg .xh { stroke: var(--muted); stroke-width: 1; }
+svg .dot { stroke: var(--field); stroke-width: 2; }
+svg .hit { fill: transparent; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--fg); padding: 6px 9px; font-size: 15px; line-height: 1.4; min-width: 170px; z-index: 2; }
+.tip b { display: block; font-family: var(--mono); font-weight: 600; text-transform: uppercase; }
+.tip div { display: flex; justify-content: space-between; gap: 12px; }
+.tip .v { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); border: 1px dashed var(--line); padding: 24px 16px; }
+
+/* Spreads: a continuous row of board cells */
+.spreads { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0; border-top: 1px solid var(--fg); border-left: 1px solid var(--fg); }
+.spread { border-right: 1px solid var(--fg); border-bottom: 1px solid var(--fg); background: var(--field); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.spread .k { font: 600 12px/1.35 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.spread .v { font: 600 1.35rem var(--mono); font-variant-numeric: tabular-nums; }
+.spread .v small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+.spread .d { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.spread svg { display: block; width: 100%; height: 44px; }
+.spark { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.spark-dot { fill: var(--chart-1); stroke: var(--field); stroke-width: 2; }
+
+footer { display: flex; flex-direction: column; gap: 10px; color: var(--muted); font-size: 16px; }
+footer p { margin: 0; max-width: 85ch; }
+footer > p:first-child + .maker { margin-top: -8px; }
+.maker { font: 400 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#attribution { color: var(--fg); border-top: 1px solid var(--hair); padding-top: 10px; }
+#attribution a { font-weight: 600; }
+details { background: var(--surface); border: 1px solid var(--line); padding: 0 14px; color: var(--fg); }
+summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font: 600 14px var(--mono); letter-spacing: .08em; text-transform: uppercase; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "+"; display: inline-block; width: 1ch; font-family: var(--mono); color: var(--muted); }
+details[open] > summary::before { content: "-"; }
+details[open] { padding-bottom: 12px; }
+details.inner { background: none; border: 0; padding: 0; }
+details.inner summary { font-size: 13px; color: var(--muted); }
+details .method { display: flex; flex-direction: column; gap: 8px; max-width: 76ch; padding-top: 6px; }
+details .method p, details .method ul { margin: 0; }
+details .method li { margin-bottom: 3px; }
+code { font-family: var(--mono); font-size: 14px; background: var(--surface-2); padding: 1px 4px; }
+
+@media (max-width: 520px) {
+  h1 { font-size: 2rem; }
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .board span:nth-child(3) { border-left: 0; }
+  .board span:nth-child(n+3) { border-top: 1px solid var(--fg); }
+  .panel { padding: 12px; }
+  .tabs button { padding: 8px 10px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<script id="live-loader">
+// GitHub Pages only: read the collector's output from this same site.
+// Same-origin GETs of two static JSON files. Nothing is sent anywhere.
+window.COMMODITY_PULSE_LIVE = (function () {
+  "use strict";
+  var MAX = 30 * 1024 * 1024;
+  function get(url) {
+    return fetch(url, { credentials: "omit", cache: "no-cache", redirect: "error" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status + " for " + url);
+      return r.text();
+    }).then(function (t) {
+      if (t.length > MAX) throw new Error(url + " is too large");
+      return JSON.parse(t);
+    });
+  }
+  return Promise.all([get("data/monthly.json"), get("data/meta.json").catch(function () { return {}; })])
+    .then(function (r) { return { monthly: r[0], meta: r[1] }; });
+})();
+</script>
+<div class="wrap">
+  <header class="strip">
+    <div class="board" aria-label="Data source">
+      <span><i>Src</i><b>World Bank</b></span>
+      <span><i>Sheet</i><b>Pink Sheet</b></span>
+      <span><i>Freq</i><b>Monthly avg</b></span>
+      <span><i>Ccy</i><b>Nominal USD</b></span>
+    </div>
+    <h1>Commodity Pulse</h1>
+    <p class="lede">Monthly prices for energy, metals, agriculture and fertilizers from the World Bank Pink Sheet: the biggest moves, how stretched each price is against its own history, and the spreads that matter.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="data-title">
+    <div class="panel-head">
+      <h2 id="data-title">Data</h2>
+      <div class="status" id="data-status">
+        <span class="chip" id="chip-source">World Bank Pink Sheet</span>
+        <span class="chip muted" id="chip-mode">Snapshot</span>
+      </div>
+    </div>
+    <p class="hint" id="data-note">Loading data.</p>
+    <div class="banner" id="data-banner" hidden></div>
+    <details class="inner" id="load-own">
+      <summary>Load your own data</summary>
+      <div class="method">
+        <p class="hint">A <code>monthly.json</code> from this project's repo, or a tidy CSV with columns <code>series_id, name, unit, date, value</code> (or <code>series_id, date, value</code>). Dates as <code>YYYY-MM</code> or <code>1960M01</code>. Up to 5 MB and 50,000 rows. The file is read in this tab only.</p>
+        <div class="row">
+          <label class="lbl" for="file-in">Data file</label>
+          <input type="file" id="file-in" accept=".json,.csv,.tsv,.txt,application/json,text/csv">
+          <button type="button" id="btn-reset">Back to bundled data</button>
+        </div>
+        <p class="msg" id="file-msg" role="status" hidden></p>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" aria-labelledby="movers-title">
+    <div class="panel-head">
+      <h2 id="movers-title">Movers</h2>
+      <span class="chip muted" id="chip-month">Latest month</span>
+    </div>
+    <div class="tops">
+      <div>
+        <h3 id="top-mom-title">Largest month-over-month</h3>
+        <ol class="top" id="top-mom" aria-labelledby="top-mom-title"></ol>
+      </div>
+      <div>
+        <h3 id="top-yoy-title">Largest year-over-year</h3>
+        <ol class="top" id="top-yoy" aria-labelledby="top-yoy-title"></ol>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Commodity group" id="tabs"></div>
+    <div role="tabpanel" id="group-panel" aria-labelledby="tab-energy" tabindex="0">
+      <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+        <div class="field" style="width: 17rem; max-width: 100%;">
+          <label for="movers-sort">Sort by</label>
+          <select id="movers-sort">
+            <option value="mom">Largest month-over-month move</option>
+            <option value="yoy">Largest year-over-year move</option>
+            <option value="name">Pink Sheet order</option>
+          </select>
+        </div>
+        <div class="row">
+          <button type="button" id="btn-copy">Copy results as CSV</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <table class="movers" id="movers-table">
+          <caption class="sr" id="movers-caption">Latest values and changes</caption>
+          <thead>
+            <tr>
+              <th scope="col">Commodity</th>
+              <th scope="col">Unit</th>
+              <th scope="col" class="n">Month</th>
+              <th scope="col" class="n">Price</th>
+              <th scope="col" class="n">MoM</th>
+              <th scope="col" class="n">YoY</th>
+              <th scope="col" class="n" title="Z-score against the last 12 months">z (12m)</th>
+              <th scope="col" class="n" title="Percentile of the latest value against all loaded history">Percentile</th>
+            </tr>
+          </thead>
+          <tbody id="movers-body"></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top: 6px;">Select a commodity name to add it to the chart.</p>
+      <textarea id="copy-fallback" rows="6" aria-label="Results as CSV, select and copy" hidden readonly></textarea>
+      <p class="msg" id="copy-msg" role="status" hidden></p>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="chart-title">
+    <div class="panel-head">
+      <h2 id="chart-title">Price chart</h2>
+      <div class="row" role="group" aria-label="Date range presets">
+        <button type="button" id="rng-12" data-months="12">1Y</button>
+        <button type="button" id="rng-60" data-months="60">5Y</button>
+        <button type="button" id="rng-120" data-months="120">10Y</button>
+        <button type="button" id="rng-all" data-months="0">All</button>
+      </div>
+    </div>
+    <div class="ctrls">
+      <div class="field"><label for="s1"><span class="swatch" style="background: var(--chart-1)"></span>Series 1</label><select id="s1"></select></div>
+      <div class="field"><label for="s2"><span class="swatch" style="background: var(--chart-4)"></span>Series 2</label><select id="s2"></select></div>
+      <div class="field"><label for="s3"><span class="swatch" style="background: var(--series-3)"></span>Series 3</label><select id="s3"></select></div>
+      <div class="field"><label for="s4"><span class="swatch" style="background: var(--series-4)"></span>Series 4</label><select id="s4"></select></div>
+      <div class="field"><label for="range-from">From</label><select id="range-from"></select></div>
+      <div class="field"><label for="range-to">To</label><select id="range-to"></select></div>
+      <div class="field">
+        <span class="lbl" id="rebase-lbl">Scale</span>
+        <label class="check" for="rebase"><input type="checkbox" id="rebase"> Rebase to 100</label>
+      </div>
+      <div class="field"><label for="base-month">Base month (= 100)</label><select id="base-month"></select></div>
+    </div>
+    <p class="hint" id="chart-note" hidden></p>
+    <div class="legend" id="legend" aria-label="Legend"></div>
+    <div class="chart-box" id="chart-box">
+      <svg id="chart" role="img" aria-labelledby="chart-title chart-desc"><desc id="chart-desc">Line chart of the selected monthly prices.</desc></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <details class="inner" id="chart-table-wrap">
+      <summary>Chart data as a table</summary>
+      <div class="scroll" style="max-height: 340px; overflow-y: auto; margin-top: 8px;">
+        <table id="chart-table"><thead id="chart-thead"></thead><tbody id="chart-tbody"></tbody></table>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" aria-labelledby="spreads-title">
+    <div class="panel-head">
+      <h2 id="spreads-title">Spreads and ratios</h2>
+      <span class="chip muted" id="chip-spread-range">Chart range</span>
+    </div>
+    <p class="hint">Latest value, change from last month and from a year ago (in the spread's own units), 12-month z-score, and percentile against loaded history. Sparklines follow the chart's date range.</p>
+    <div class="spreads" id="spreads"></div>
+  </section>
+
+  <footer>
+    <p>Built by Will Whitmire. Runs entirely in your browser; nothing you enter is uploaded.</p>
+    <p class="maker">W. Whitmire / Field Tools / No. 11</p>
+    <p id="attribution">Data: <a href="https://www.worldbank.org/en/research/commodity-markets" rel="noopener noreferrer">World Bank Commodity Price Data (The Pink Sheet)</a>, licensed under <a href="https://datacatalog.worldbank.org/public-licenses?fragment=cc" rel="noopener noreferrer">Creative Commons Attribution 4.0 (CC BY 4.0)</a>. Values are reformatted; month-over-month and year-over-year changes, z-scores, percentiles, spreads, ratios and rebased series are computed by this tool. The World Bank does not endorse this tool.</p>
+    <details id="method">
+      <summary>Method and limits</summary>
+      <div class="method">
+        <p><b>Source.</b> The World Bank publishes monthly average prices (nominal US dollars) in the "Monthly Prices" sheet of <code>CMO-Historical-Data-Monthly.xlsx</code>, usually on the second business day of each month. The GitHub version of this page reads a copy that a scheduled job refreshes weekly. The demo page carries a fixed snapshot.</p>
+        <p><b>Change.</b> <code>MoM = (P_t - P_t-1) / |P_t-1| x 100</code>. <code>YoY = (P_t - P_t-12) / |P_t-12| x 100</code>. Both use the latest month with a value. Blank if the earlier month is missing or zero. For spreads and ratios the changes are differences in the spread's own units, not percent.</p>
+        <p><b>12-month z-score.</b> <code>z = (P_t - mean) / sd</code> over the 12 months ending at t, including t, with the sample standard deviation (n - 1). Blank if any of the 12 months is missing or all 12 are equal.</p>
+        <p><b>Percentile.</b> <code>100 x (count below + 0.5 x count equal) / n</code> over every non-missing month up to and including t. The all-time high of n distinct values scores <code>100 x (n - 0.5) / n</code>, not 100.</p>
+        <p><b>Spreads and ratios.</b> Month by month: Brent minus WTI; Europe gas (TTF) minus US gas (Henry Hub), and their ratio; urea divided by Europe gas price (mmbtu of gas per tonne of urea, a rough feedstock-margin gauge, not a production cost); gold divided by silver (both per troy ounce).</p>
+        <p><b>Rebase.</b> <code>R_t = P_t / P_base x 100</code>. Series with different units are always shown rebased, so the chart never needs two y-axes.</p>
+        <p><b>Limits.</b></p>
+        <ul>
+          <li>Monthly averages hide intra-month swings. The latest months are often revised in later releases.</li>
+          <li>Nominal dollars, no inflation adjustment. A 1980 price and a 2026 price are not comparable in real terms.</li>
+          <li>Percentile and z-score describe a price against its own loaded history. They are not forecasts or valuation signals, and they change with how much history is loaded.</li>
+          <li>Some series change definition over time (the Pink Sheet notes replacements, for example palm oil from January 2026). The tool does not splice or adjust them.</li>
+          <li>Groups follow the Pink Sheet's sections. Series the tool does not recognize land in Other.</li>
+          <li>Rounding: prices show 0 decimals at 1,000 and above, 1 decimal at 100 and above, else 2. Halves round away from zero.</li>
+          <li>This is not investment advice.</li>
+        </ul>
+      </div>
+    </details>
+  </footer>
+</div>
+
+<script type="application/json" id="snapshot">{"series":[{"id":"COAL_AUS","name":"Coal, Australia","unit":"$/mt","group":"energy","start":"2025-07","values":[112.9,112.2,106.3,107.5,112.6,107.7,109.8,118.4,138.6,130.9,136.9,138.5,131.9,135.2,147.1]},{"id":"COAL_SAFRICA","name":"Coal, South Africa","unit":"$/mt","group":"energy","start":"2025-07","values":[93.6,93.3,92.3,91.6,91.6,90.9,90.6,91.2,93.8,94.8,95.6,96.3,96.3,96.8,98.2]},{"id":"CRUDE_PETRO","name":"Crude oil, average","unit":"$/bbl","group":"energy","start":"2025-07","values":[69.2,66.7,66.5,63.0,62.3,60.9,63.7,68.0,95.6,103.9,100.4,81.7,79.8,84.4,102.3]},{"id":"CRUDE_BRENT","name":"Crude oil, Brent","unit":"$/bbl","group":"energy","start":"2025-07","values":[71.0,68.2,68.0,64.7,63.6,62.7,66.8,71.1,103.7,120.4,107.5,85.4,83.4,90.9,116.8]},{"id":"CRUDE_DUBAI","name":"Crude oil, Dubai","unit":"$/bbl","group":"energy","start":"2025-07","values":[69.2,67.9,67.8,64.3,63.8,62.0,63.9,68.4,91.9,92.7,94.7,77.7,76.7,79.7,93.3]},{"id":"CRUDE_WTI","name":"Crude oil, WTI","unit":"$/bbl","group":"energy","start":"2025-07","values":[67.4,64.1,63.7,60.2,59.6,57.9,60.3,64.6,91.2,98.6,99.1,81.9,79.4,82.7,96.9]},{"id":"NGAS_US","name":"Natural gas, U.S.","unit":"$/mmbtu","group":"energy","start":"2025-07","values":[3.19,2.91,2.97,3.2,3.79,4.25,7.58,3.61,3.05,2.77,2.93,3.15,2.89,2.77,2.95]},{"id":"NGAS_EUR","name":"Natural gas, Europe","unit":"$/mmbtu","group":"energy","start":"2025-07","values":[11.62,11.15,11.12,10.89,10.42,9.48,11.76,11.24,17.91,15.41,16.17,15.17,18.06,21.11,25.42]},{"id":"DAP","name":"DAP","unit":"$/mt","group":"fertilizers","start":"2025-07","values":[736.0,795.1,780.6,754.0,708.3,627.5,619.2,626.5,658.3,725.3,769.5,783.8,781.3,793.5,800.6]},{"id":"PHOSROCK","name":"Phosphate rock","unit":"$/mt","group":"fertilizers","start":"2025-07","values":[152.5,152.5,152.5,152.5,152.5,152.5,152.5,152.5,152.5,152.5,152.5,156.9,170.0,170.0,170.0]},{"id":"POTASH","name":"Potassium chloride","unit":"$/mt","group":"fertilizers","start":"2025-07","values":[362.5,356.5,352.5,352.0,353.8,358.3,366.0,372.5,380.6,401.3,405.0,402.5,396.5,386.9,367.5]},{"id":"TSP","name":"TSP","unit":"$/mt","group":"fertilizers","start":"2025-07","values":[655.0,662.9,664.4,658.5,636.3,538.5,529.2,536.3,558.1,658.1,713.5,735.6,719.5,704.4,690.0]},{"id":"UREA_EE_BULK","name":"Urea, E. Europe","unit":"$/mt","group":"fertilizers","start":"2025-07","values":[496.0,507.7,461.1,394.4,409.3,392.5,415.4,472.0,725.6,856.9,770.5,453.1,400.0,390.0,407.5]},{"id":"ALUMINUM","name":"Aluminum","unit":"$/mt","group":"metals","start":"2025-07","values":[2606.0,2597.0,2653.0,2793.0,2819.0,2876.0,3142.0,3065.0,3373.0,3600.0,3666.0,3439.0,3161.0,3251.0,3283.0]},{"id":"COPPER","name":"Copper","unit":"$/mt","group":"metals","start":"2025-07","values":[9771.0,9670.0,9984.0,10740.0,10812.0,11785.0,13012.0,12951.0,12529.0,12951.0,13543.0,13552.0,13543.0,14326.0,14474.0]},{"id":"IRON_ORE","name":"Iron ore","unit":"$/dmt","group":"metals","start":"2025-07","values":[97.3,99.7,103.3,103.5,102.5,104.6,105.5,98.8,104.5,106.1,108.6,100.8,98.2,96.3,97.7]},{"id":"LEAD","name":"Lead","unit":"$/mt","group":"metals","start":"2025-07","values":[1993.0,1947.0,1955.0,1968.0,1998.0,1940.0,1995.0,1917.0,1878.0,1930.0,1991.0,1946.0,1842.0,1855.0,1873.0]},{"id":"NICKEL","name":"Nickel","unit":"$/mt","group":"metals","start":"2025-07","values":[15034.0,14949.0,15106.0,15092.0,14671.0,14884.0,17769.0,17173.0,17076.0,17962.0,18806.0,17588.0,16651.0,16751.0,16324.0]},{"id":"TIN","name":"Tin","unit":"$/mt","group":"metals","start":"2025-07","values":[33610.0,33834.0,34484.0,36012.0,36963.0,41220.0,49538.0,48694.0,47324.0,48806.0,53563.0,53037.0,52971.0,55385.0,53712.0]},{"id":"ZINC","name":"Zinc","unit":"$/mt","group":"metals","start":"2025-07","values":[2763.0,2789.0,2933.0,3152.0,3177.0,3168.0,3213.0,3324.0,3182.0,3364.0,3482.0,3539.0,3599.0,3875.0,4021.0]},{"id":"GOLD","name":"Gold","unit":"$/toz","group":"metals","start":"2025-07","values":[3340.0,3368.0,3668.0,4058.0,4087.0,4309.0,4753.0,5020.0,4856.0,4721.0,4587.0,4228.0,4073.0,4411.0,4319.0]},{"id":"PLATINUM","name":"Platinum","unit":"$/toz","group":"metals","start":"2025-07","values":[1391.0,1343.0,1435.0,1616.0,1565.0,1893.0,2434.0,2137.0,2046.0,2028.0,1998.0,1726.0,1622.0,1780.0,1784.0]},{"id":"SILVER","name":"Silver","unit":"$/toz","group":"metals","start":"2025-07","values":[37.7,38.2,42.8,49.4,50.4,62.3,92.1,81.9,77.9,75.9,78.0,66.7,58.8,65.4,64.6]},{"id":"COCOA","name":"Cocoa","unit":"$/kg","group":"agriculture","start":"2025-07","values":[7.37,7.6,7.03,5.95,5.61,5.78,4.97,3.59,3.24,3.4,4.16,4.4,5.61,5.95,5.92]},{"id":"COFFEE_ARABIC","name":"Coffee, Arabica","unit":"$/kg","group":"agriculture","start":"2025-07","values":[7.18,8.08,8.83,8.9,9.05,8.4,8.02,7.08,7.37,7.3,6.95,6.79,7.91,7.97,7.26]},{"id":"COFFEE_ROBUS","name":"Coffee, Robusta","unit":"$/kg","group":"agriculture","start":"2025-07","values":[3.69,4.39,4.66,4.74,4.74,4.2,4.24,3.96,3.9,3.63,3.67,3.73,4.07,3.98,3.69]},{"id":"TEA_AVG","name":"Tea, average","unit":"$/kg","group":"agriculture","start":"2025-07","values":[3.02,3.04,2.94,3.01,2.99,2.88,2.73,2.7,2.69,2.83,3.0,2.97,2.98,2.91,2.85]},{"id":"MAIZE","name":"Maize","unit":"$/mt","group":"agriculture","start":"2025-07","values":[192.0,185.5,197.4,198.1,202.0,205.7,204.5,209.6,212.7,214.0,216.2,197.1,213.4,224.0,239.6]},{"id":"RICE_05","name":"Rice, Thailand 5%","unit":"$/mt","group":"agriculture","start":"2025-07","values":[392.0,375.0,374.0,356.0,368.0,424.0,408.0,409.0,381.0,403.0,440.0,494.0,467.0,471.0,482.0]},{"id":"WHEAT_US_HRW","name":"Wheat, U.S., HRW","unit":"$/mt","group":"agriculture","start":"2025-07","values":[235.0,231.1,233.8,230.8,245.9,242.8,249.9,257.6,275.9,282.0,303.0,286.0,310.0,330.0,347.0]},{"id":"WHEAT_US_SRW","name":"Wheat, U.S., SRW","unit":"$/mt","group":"agriculture","start":"2025-07","values":[210.6,200.3,207.0,209.3,225.2,223.2,217.7,232.4,247.4,246.5,259.5,237.5,258.1,263.2,278.6]},{"id":"SUGAR_WLD","name":"Sugar, World","unit":"$/kg","group":"agriculture","start":"2025-07","values":[0.37,0.37,0.35,0.34,0.32,0.32,0.32,0.31,0.33,0.32,0.34,0.32,0.34,0.38,0.41]},{"id":"BANANA_US","name":"Bananas, U.S.","unit":"$/kg","group":"agriculture","start":"2025-07","values":[1.01,1.02,1.02,1.13,1.16,1.16,1.2,1.21,1.21,1.15,1.12,1.18,1.17,1.1,1.12]},{"id":"ORANGE","name":"Oranges","unit":"$/kg","group":"agriculture","start":"2025-07","values":[1.52,1.28,1.29,1.05,0.86,0.92,1.11,0.94,0.97,0.95,0.92,0.82,0.78,0.77,0.79]},{"id":"BEEF","name":"Beef","unit":"$/kg","group":"agriculture","start":"2025-07","values":[6.72,6.86,6.9,7.09,7.51,7.38,7.97,8.12,8.21,8.21,7.95,7.46,7.31,7.28,6.86]},{"id":"CHICKEN","name":"Chicken","unit":"$/kg","group":"agriculture","start":"2025-07","values":[1.78,1.67,1.74,1.72,1.77,1.78,1.75,1.79,1.66,1.75,1.86,1.77,1.73,1.69,1.81]},{"id":"COTTON_A_INDX","name":"Cotton, A Index","unit":"$/kg","group":"agriculture","start":"2025-07","values":[1.74,1.73,1.72,1.68,1.66,1.63,1.64,1.63,1.7,1.9,2.03,1.9,1.96,2.11,2.1]},{"id":"RUBBER_TSR20","name":"Rubber, TSR20","unit":"$/kg","group":"agriculture","start":"2025-07","values":[1.68,1.71,1.74,1.71,1.71,1.74,1.84,1.93,1.95,2.06,2.21,2.25,2.14,2.24,2.41]}]}</script>
+<script type="application/json" id="snapshot-meta">{"release":"2026-10-02","seed":true,"source":"World Bank Commodity Price Data (The Pink Sheet)","editions":["https://thedocs.worldbank.org/en/doc/18675f1d1639c7a34d463f59263ba0a2-0050012025/related/CMO-Pink-Sheet-October-2025.pdf","https://thedocs.worldbank.org/en/doc/18675f1d1639c7a34d463f59263ba0a2-0050012025/related/CMO-Pink-Sheet-January-2026.pdf","https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-April-2026.pdf","https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-July-2026.pdf","https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-October-2026.pdf"],"license":"CC BY 4.0"}</script>
+
+<script id="core">
+// Pure commodity analytics. No DOM access. Mirrors src/commodity_pulse/analytics.py.
+var CP = (function () {
+  "use strict";
+  var GROUPS = ["energy", "metals", "agriculture", "fertilizers", "other"];
+  var GROUP_LABELS = { energy: "Energy", metals: "Metals", agriculture: "Agriculture", fertilizers: "Fertilizers", other: "Other" };
+  var CODE_GROUPS = {
+    energy: ["CRUDE_PETRO", "CRUDE_BRENT", "CRUDE_DUBAI", "CRUDE_WTI", "COAL_AUS", "COAL_SAFRICA",
+      "NGAS_US", "NGAS_EUR", "NGAS_JP", "INATGAS"],
+    fertilizers: ["PHOSROCK", "DAP", "TSP", "UREA_EE_BULK", "POTASH"],
+    metals: ["ALUMINUM", "IRON_ORE", "COPPER", "LEAD", "TIN", "NICKEL", "ZINC", "GOLD", "PLATINUM", "SILVER"],
+    agriculture: ["COCOA", "COFFEE_ARABIC", "COFFEE_ROBUS", "TEA_AVG", "TEA_COLOMBO", "TEA_KOLKATA", "TEA_MOMBASA",
+      "COCONUT_OIL", "GRNUT", "FISH_MEAL", "GRNUT_OIL", "PALM_OIL", "PLMKRNL_OIL", "SOYBEANS",
+      "SOYBEAN_OIL", "SOYBEAN_MEAL", "RAPESEED_OIL", "SUNFLOWER_OIL", "BARLEY", "MAIZE", "SORGHUM",
+      "RICE_05", "RICE_25", "RICE_A1", "RICE_05_VNM", "WHEAT_US_SRW", "WHEAT_US_HRW", "BANANA_EU",
+      "BANANA_US", "ORANGE", "BEEF", "CHICKEN", "LAMB", "SHRIMP_MEX", "SUGAR_EU", "SUGAR_US",
+      "SUGAR_WLD", "TOBAC_US", "LOGS_CMR", "LOGS_MYS", "SAWNWD_CMR", "SAWNWD_MYS", "PLYWOOD",
+      "COTTON_A_INDX", "RUBBER_TSR20", "RUBBER1_MYSG"]
+  };
+  var NAME_KEYWORDS = [
+    ["fertilizers", ["urea", "dap", "tsp", "phosphate", "potassium", "potash", "fertili"]],
+    ["energy", ["crude", "coal", "natural gas", "lng", "liquefied"]],
+    ["metals", ["aluminum", "aluminium", "copper", "iron ore", "lead", "nickel", "tin", "zinc",
+      "gold", "silver", "platinum"]],
+    ["agriculture", ["cocoa", "coffee", "tea", "oil", "meal", "soybean", "barley", "maize", "corn",
+      "sorghum", "rice", "wheat", "banana", "orange", "beef", "chicken", "lamb",
+      "shrimp", "sugar", "tobacco", "logs", "sawnwood", "plywood", "cotton", "rubber",
+      "groundnut"]]
+  ];
+  var CODE_TO_GROUP = {};
+  Object.keys(CODE_GROUPS).forEach(function (g) {
+    CODE_GROUPS[g].forEach(function (c) { CODE_TO_GROUP[c] = g; });
+  });
+  var SPREADS = [
+    { id: "brent_wti", label: "Brent minus WTI", a: "CRUDE_BRENT", b: "CRUDE_WTI", op: "diff", unit: "$/bbl" },
+    { id: "gas_eu_us", label: "Europe gas (TTF) minus US gas (Henry Hub)", a: "NGAS_EUR", b: "NGAS_US", op: "diff", unit: "$/mmbtu" },
+    { id: "gas_eu_us_ratio", label: "Europe gas / US gas", a: "NGAS_EUR", b: "NGAS_US", op: "ratio", unit: "ratio" },
+    { id: "urea_gas", label: "Urea / Europe gas", a: "UREA_EE_BULK", b: "NGAS_EUR", op: "ratio", unit: "mmbtu/mt" },
+    { id: "gold_silver", label: "Gold / silver", a: "GOLD", b: "SILVER", op: "ratio", unit: "ratio" }
+  ];
+  var MONTH_RE = /^([0-9]{4})-([0-9]{2})$/;
+  var ID_RE = /^[A-Za-z0-9_.\-]{1,64}$/;
+  var MAX_SERIES = 500, MAX_POINTS_PER_SERIES = 2400, MAX_POINTS = 1000000, MAX_CSV_ROWS = 50000;
+  var MISSING_TOKENS = ["", "..", "…", "nan", "na", "n/a", "null", "none", "-"];
+  var NUM_RE = /^[+-]?([0-9]+[.]?[0-9]*|[.][0-9]+)([eE][+-]?[0-9]+)?$/;
+  var CSV_DATE_RE = /^([0-9]{4})(?:-|M|m)([0-9]{1,2})$/;
+  var ID_KEYS = ["series_id", "id", "series", "code"];
+
+  function AnalyticsError(code, message) {
+    this.name = "AnalyticsError";
+    this.code = code;
+    this.message = message;
+  }
+  AnalyticsError.prototype = Object.create(Error.prototype);
+  AnalyticsError.prototype.constructor = AnalyticsError;
+  function fail(code, msg) { throw new AnalyticsError(code, msg); }
+
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function isObj(o) { return o !== null && typeof o === "object" && !Array.isArray(o); }
+
+  // ---------------------------------------------------------------- months
+  function parseMonth(s) {
+    var m = typeof s === "string" ? MONTH_RE.exec(s) : null;
+    if (!m) fail("bad_month", "Month must look like YYYY-MM.");
+    var y = parseInt(m[1], 10), mo = parseInt(m[2], 10);
+    if (mo < 1 || mo > 12) fail("bad_month", "Month must be 01 to 12.");
+    return y * 12 + mo - 1;
+  }
+  function pad(n, w) { var s = String(n); while (s.length < w) s = "0" + s; return s; }
+  function formatMonth(idx) {
+    var y = Math.floor(idx / 12);
+    var mo = idx - y * 12 + 1;
+    return pad(y, 4) + "-" + pad(mo, 2);
+  }
+  function monthAdd(s, n) { return formatMonth(parseMonth(s) + n); }
+  function monthDiff(a, b) { return parseMonth(a) - parseMonth(b); }
+  function num(v) { return (typeof v === "number" && isFinite(v)) ? v : null; }
+  function valueAt(series, month) {
+    var i = monthDiff(month, series.start);
+    var vals = series.values;
+    if (i < 0 || i >= vals.length) return null;
+    return num(vals[i]);
+  }
+  function endMonth(series) { return monthAdd(series.start, series.values.length - 1); }
+  function lastIndex(series) {
+    var vals = series.values, i = vals.length - 1;
+    while (i >= 0 && num(vals[i]) === null) i--;
+    return i;
+  }
+  function sid(series) { return has(series, "id") ? series.id : ""; }
+
+  // ---------------------------------------------------------------- changes
+  function pctChange(cur, prev) {
+    if (cur === null || prev === null || prev === 0) return null;
+    return (cur - prev) / Math.abs(prev) * 100.0;
+  }
+  function absChange(cur, prev) {
+    if (cur === null || prev === null) return null;
+    return cur - prev;
+  }
+  function zscore(series, idx, window) {
+    if (window === undefined) window = 12;
+    if (idx < window - 1) return null;
+    var vals = series.values, xs = [];
+    for (var k = idx - window + 1; k < idx + 1; k++) {
+      var v = num(vals[k]);
+      if (v === null) return null;
+      xs.push(v);
+    }
+    var total = 0.0;
+    for (var i = 0; i < xs.length; i++) total += xs[i];
+    var mean = total / window;
+    var ss = 0.0;
+    for (var j = 0; j < xs.length; j++) { var d = xs[j] - mean; ss += d * d; }
+    var sd = Math.sqrt(ss / (window - 1));
+    if (sd === 0) return null;
+    return (xs[xs.length - 1] - mean) / sd;
+  }
+  function percentile(series, idx) {
+    var vals = series.values;
+    var x = (idx >= 0 && idx < vals.length) ? num(vals[idx]) : null;
+    if (x === null) return null;
+    var below = 0, equal = 0, n = 0;
+    for (var k = 0; k < idx + 1; k++) {
+      var v = num(vals[k]);
+      if (v === null) continue;
+      n++;
+      if (v < x) below++;
+      else if (v === x) equal++;
+    }
+    return 100.0 * (below + 0.5 * equal) / n;
+  }
+  function summarize(series, kind) {
+    if (kind === undefined) kind = "pct";
+    var idx = lastIndex(series);
+    if (idx < 0) return { id: sid(series), date: null, value: null, mom: null, yoy: null, z12: null, pct: null, n: 0 };
+    var vals = series.values;
+    var cur = num(vals[idx]);
+    var prev = idx >= 1 ? num(vals[idx - 1]) : null;
+    var year = idx >= 12 ? num(vals[idx - 12]) : null;
+    var change = kind === "pct" ? pctChange : absChange;
+    var n = 0;
+    for (var k = 0; k < idx + 1; k++) if (num(vals[k]) !== null) n++;
+    return {
+      id: sid(series), date: monthAdd(series.start, idx), value: cur,
+      mom: change(cur, prev), yoy: change(cur, year),
+      z12: zscore(series, idx, 12), pct: percentile(series, idx), n: n
+    };
+  }
+
+  // ---------------------------------------------------------------- transforms
+  function rebase(series, baseMonth) {
+    var b = valueAt(series, baseMonth), out = [];
+    for (var i = 0; i < series.values.length; i++) {
+      var x = num(series.values[i]);
+      out.push((x === null || b === null || b === 0) ? null : x / b * 100.0);
+    }
+    return { id: sid(series), start: series.start, values: out };
+  }
+  function windowOf(series, first, last) {
+    var n = monthDiff(last, first) + 1;
+    if (n < 1) fail("bad_range", "Range end must not be before range start.");
+    var out = [];
+    for (var k = 0; k < n; k++) out.push(valueAt(series, monthAdd(first, k)));
+    return { id: sid(series), start: first, values: out };
+  }
+  function combine(a, b, op) {
+    if (op !== "diff" && op !== "ratio") fail("bad_op", "op must be diff or ratio.");
+    var first = monthDiff(a.start, b.start) >= 0 ? a.start : b.start;
+    var ea = endMonth(a), eb = endMonth(b);
+    var last = monthDiff(ea, eb) <= 0 ? ea : eb;
+    var n = monthDiff(last, first) + 1, out = [];
+    for (var k = 0; k < Math.max(n, 0); k++) {
+      var m = monthAdd(first, k), x = valueAt(a, m), y = valueAt(b, m);
+      if (x === null || y === null) out.push(null);
+      else if (op === "diff") out.push(x - y);
+      else out.push(y === 0 ? null : x / y);
+    }
+    return { id: sid(a) + (op === "diff" ? "-" : "/") + sid(b), start: first, values: out };
+  }
+  function findSeries(dataset, id) {
+    var list = dataset.series || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+  function spreads(dataset, defs) {
+    var out = [];
+    (defs || SPREADS).forEach(function (d) {
+      var a = findSeries(dataset, d.a), b = findSeries(dataset, d.b);
+      if (a === null || b === null) return;
+      var s = combine(a, b, d.op);
+      s.id = d.id;
+      out.push({ id: d.id, label: d.label, unit: d.unit, op: d.op, a: d.a, b: d.b, series: s, summary: summarize(s, "abs") });
+    });
+    return out;
+  }
+  function movers(dataset, group, by, top) {
+    if (by === undefined) by = "mom";
+    if (by !== "mom" && by !== "yoy") fail("bad_sort", "by must be mom or yoy.");
+    var rows = [];
+    (dataset.series || []).forEach(function (s) {
+      if (group !== null && group !== undefined && s.group !== group) return;
+      var r = summarize(s, "pct");
+      r.name = has(s, "name") ? s.name : r.id;
+      r.unit = has(s, "unit") ? s.unit : "";
+      r.group = has(s, "group") ? s.group : "other";
+      rows.push(r);
+    });
+    rows.sort(function (p, q) {
+      var a = p[by], b = q[by];
+      if (a === null && b === null) return 0;
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return Math.abs(b) - Math.abs(a) > 0 ? 1 : (Math.abs(b) - Math.abs(a) < 0 ? -1 : 0);
+    });
+    return (top === null || top === undefined) ? rows : rows.slice(0, top);
+  }
+
+  // ---------------------------------------------------------------- classify
+  function classify(code, name) {
+    var g = CODE_TO_GROUP[(code || "").toUpperCase()];
+    if (g && has(CODE_TO_GROUP, (code || "").toUpperCase())) return g;
+    var words = ((name || "").toLowerCase().match(/[a-z]+/g) || []).join(" ");
+    var padded = " " + words + " ";
+    for (var i = 0; i < NAME_KEYWORDS.length; i++) {
+      var keys = NAME_KEYWORDS[i][1];
+      for (var j = 0; j < keys.length; j++) {
+        if (padded.indexOf(" " + keys[j] + " ") >= 0) return NAME_KEYWORDS[i][0];
+      }
+    }
+    return "other";
+  }
+
+  // ---------------------------------------------------------------- formatting
+  function plainDigits(x) {
+    var r = String(x);
+    if (r.indexOf("e") < 0 && r.indexOf("E") < 0) return r;
+    var parts = r.toLowerCase().split("e"), mant = parts[0], e = parseInt(parts[1], 10);
+    var ip = mant, fp = "";
+    if (mant.indexOf(".") >= 0) { ip = mant.split(".")[0]; fp = mant.split(".")[1]; }
+    var digits = ip + fp, point = ip.length + e;
+    if (point <= 0) return "0." + "0".repeat(-point) + digits;
+    if (point >= digits.length) return digits + "0".repeat(point - digits.length);
+    return digits.slice(0, point) + "." + digits.slice(point);
+  }
+  function increment(digits) {
+    var ds = digits.split(""), i = ds.length - 1;
+    while (i >= 0) {
+      if (ds[i] === "9") { ds[i] = "0"; i--; }
+      else { ds[i] = String(parseInt(ds[i], 10) + 1); return ds.join(""); }
+    }
+    return "1" + ds.join("");
+  }
+  function lstripZeros(s) { var i = 0; while (i < s.length && s[i] === "0") i++; return s.slice(i); }
+  function allZeroish(s, chars) {
+    for (var i = 0; i < s.length; i++) if (chars.indexOf(s[i]) < 0) return false;
+    return true;
+  }
+  function roundHalfAway(x, decimals) {
+    if (x === null || x === undefined || !isFinite(x)) return "";
+    var neg = x < 0;
+    var s = plainDigits(Math.abs(x));
+    var ip = s, fp = "";
+    if (s.indexOf(".") >= 0) { ip = s.split(".")[0]; fp = s.split(".")[1]; }
+    var digits;
+    if (fp.length <= decimals) {
+      fp = fp + "0".repeat(decimals - fp.length);
+      digits = ip + fp;
+    } else {
+      digits = ip + fp.slice(0, decimals);
+      if (fp[decimals] >= "5") digits = increment(digits);
+    }
+    var out;
+    if (decimals > 0) {
+      var ip2 = digits.slice(0, digits.length - decimals) || "0", fp2 = digits.slice(digits.length - decimals);
+      out = (lstripZeros(ip2) || "0") + "." + fp2;
+    } else {
+      out = lstripZeros(digits) || "0";
+    }
+    if (neg && !allZeroish(out, "0.")) out = "-" + out;
+    return out;
+  }
+  function groupThousands(s) {
+    var neg = s.charAt(0) === "-";
+    if (neg) s = s.slice(1);
+    var dot = s.indexOf("."), ip = dot >= 0 ? s.slice(0, dot) : s, fp = dot >= 0 ? s.slice(dot + 1) : "";
+    var parts = [];
+    while (ip.length > 3) { parts.unshift(ip.slice(-3)); ip = ip.slice(0, -3); }
+    parts.unshift(ip);
+    var out = parts.join(",") + (fp ? "." + fp : "");
+    return (neg ? "-" : "") + out;
+  }
+  function valueDecimals(x) {
+    var a = Math.abs(x);
+    if (a >= 1000) return 0;
+    if (a >= 100) return 1;
+    return 2;
+  }
+  function formatValue(x) {
+    if (x === null || x === undefined || !isFinite(x)) return "n/a";
+    return groupThousands(roundHalfAway(x, valueDecimals(x)));
+  }
+  function formatPct(x, decimals) {
+    if (decimals === undefined) decimals = 1;
+    if (x === null || x === undefined || !isFinite(x)) return "n/a";
+    var s = roundHalfAway(x, decimals);
+    if (s.charAt(0) !== "-" && !allZeroish(s, "0.")) s = "+" + s;
+    return s + "%";
+  }
+  function formatSigned(x, decimals) {
+    if (decimals === undefined) decimals = 2;
+    if (x === null || x === undefined || !isFinite(x)) return "n/a";
+    var s = groupThousands(roundHalfAway(x, decimals));
+    if (s.charAt(0) !== "-" && !allZeroish(s, "0.,")) s = "+" + s;
+    return s;
+  }
+
+  // ---------------------------------------------------------------- validation
+  function validateDataset(obj) {
+    if (!isObj(obj) || !Array.isArray(obj.series)) fail("bad_shape", "Data must be an object with a series list.");
+    var raw = obj.series;
+    if (raw.length === 0) fail("empty", "Data has no series.");
+    if (raw.length > MAX_SERIES) fail("too_many_series", "Data has more than " + MAX_SERIES + " series.");
+    var out = [], seen = {}, total = 0;
+    for (var i = 0; i < raw.length; i++) {
+      var s = raw[i], where = "Series " + (i + 1);
+      if (!isObj(s)) fail("bad_series", where + " is not an object.");
+      var id = s.id;
+      if (typeof id !== "string" || !ID_RE.test(id)) fail("bad_id", where + " has a missing or invalid id.");
+      if (has(seen, id)) fail("dup_id", "Series id " + id + " appears twice.");
+      seen[id] = true;
+      var name = has(s, "name") ? s.name : id;
+      var unit = has(s, "unit") ? s.unit : "";
+      if (typeof name !== "string" || name.length > 200) fail("bad_name", "Series " + id + " has an invalid name.");
+      if (typeof unit !== "string" || unit.length > 40) fail("bad_unit", "Series " + id + " has an invalid unit.");
+      try { parseMonth(s.start); }
+      catch (e) { fail("bad_start", "Series " + id + " has an invalid start month."); }
+      var vals = s.values;
+      if (!Array.isArray(vals) || vals.length === 0) fail("bad_values", "Series " + id + " has no values list.");
+      if (vals.length > MAX_POINTS_PER_SERIES) fail("too_long", "Series " + id + " has more than " + MAX_POINTS_PER_SERIES + " months.");
+      total += vals.length;
+      if (total > MAX_POINTS) fail("too_many_points", "Data has more than " + MAX_POINTS + " values.");
+      var clean = [];
+      for (var k = 0; k < vals.length; k++) {
+        var v = vals[k];
+        if (v === null) { clean.push(null); continue; }
+        var x = num(v);
+        if (x === null) fail("bad_value", "Series " + id + " value " + (k + 1) + " is not a finite number.");
+        clean.push(x);
+      }
+      var group = s.group;
+      if (GROUPS.indexOf(group) < 0) group = classify(id, name);
+      out.push({ id: id, name: name || id, unit: unit, group: group, start: s.start, values: clean });
+    }
+    return { series: out };
+  }
+
+  // ---------------------------------------------------------------- tidy CSV
+  function trimST(s) { return s.replace(/^[ \t]+|[ \t]+$/g, ""); }
+  function splitCsvLine(line, delim, lineno) {
+    var fields = [], cur = "", inq = false, i = 0, n = line.length;
+    while (i < n) {
+      var ch = line[i];
+      if (inq) {
+        if (ch === '"') {
+          if (i + 1 < n && line[i + 1] === '"') { cur += '"'; i += 2; continue; }
+          inq = false; i++; continue;
+        }
+        cur += ch; i++; continue;
+      }
+      if (ch === '"' && trimST(cur) === "") { cur = ""; inq = true; i++; continue; }
+      if (ch === delim) { fields.push(cur); cur = ""; i++; continue; }
+      cur += ch; i++;
+    }
+    if (inq) fail("bad_csv", "Line " + lineno + " has an unterminated quote.");
+    fields.push(cur);
+    return fields.map(trimST);
+  }
+  // Text for a CSV export cell. A leading = + - @ tab or CR makes spreadsheets run
+  // the cell as a formula, so such cells get a leading single quote. Text fields only.
+  function csvText(s) {
+    s = s === null || s === undefined ? "" : String(s);
+    var c = s.charAt(0);
+    return (c === "=" || c === "+" || c === "-" || c === "@" || c === "\t" || c === "\r") ? "'" + s : s;
+  }
+  function parseTidyCsv(text) {
+    if (typeof text !== "string") fail("bad_csv", "Input must be text.");
+    if (text.charAt(0) === "﻿") text = text.slice(1);
+    var lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    var delim = null, cols = null, rows = 0, by = {}, order = [];
+    for (var li = 0; li < lines.length; li++) {
+      var ln = li + 1, line = lines[li];
+      if (trimST(line) === "") continue;
+      if (delim === null) delim = line.indexOf("\t") >= 0 ? "\t" : ",";
+      var f = splitCsvLine(line, delim, ln);
+      if (f.every(function (x) { return x === ""; })) continue;
+      if (cols === null) {
+        var low = f.map(function (x) { return x.toLowerCase(); });
+        if (low.indexOf("date") >= 0 && low.indexOf("value") >= 0) {
+          var idc = null;
+          for (var q = 0; q < ID_KEYS.length; q++) {
+            if (low.indexOf(ID_KEYS[q]) >= 0) { idc = low.indexOf(ID_KEYS[q]); break; }
+          }
+          if (idc === null) fail("bad_header", "Header needs a series_id column.");
+          cols = { id: idc, date: low.indexOf("date"), value: low.indexOf("value"),
+            name: low.indexOf("name") >= 0 ? low.indexOf("name") : null,
+            unit: low.indexOf("unit") >= 0 ? low.indexOf("unit") : null };
+          continue;
+        }
+        if (f.length === 5) cols = { id: 0, name: 1, unit: 2, date: 3, value: 4 };
+        else if (f.length === 3) cols = { id: 0, name: null, unit: null, date: 1, value: 2 };
+        else fail("bad_columns", "Line " + ln + ": expected 3 or 5 columns (series_id, [name, unit,] date, value).");
+      }
+      var need = -1;
+      ["id", "name", "unit", "date", "value"].forEach(function (k) {
+        if (cols[k] !== null && cols[k] > need) need = cols[k];
+      });
+      if (f.length <= need) fail("bad_columns", "Line " + ln + " has too few columns.");
+      rows++;
+      if (rows > MAX_CSV_ROWS) fail("too_many_rows", "More than 50,000 rows. Load monthly.json for long histories.");
+      var id = f[cols.id];
+      if (!ID_RE.test(id)) fail("bad_id", "Line " + ln + ": series id must be 1 to 64 letters, digits, _ . or -.");
+      var dm = CSV_DATE_RE.exec(f[cols.date]);
+      var mo = dm ? parseInt(dm[2], 10) : 0;
+      if (!dm || mo < 1 || mo > 12) fail("bad_date", "Line " + ln + ": date must be YYYY-MM or YYYYMmm.");
+      var mi = parseInt(dm[1], 10) * 12 + mo - 1;
+      var raw = f[cols.value];
+      if (MISSING_TOKENS.indexOf(raw.toLowerCase()) >= 0) continue;
+      if (!NUM_RE.test(raw)) fail("bad_value", "Line " + ln + ": value is not a number.");
+      var v = Number(raw);
+      if (!isFinite(v)) fail("bad_value", "Line " + ln + ": value is not a finite number.");
+      if (!has(by, id)) {
+        var nm = cols.name !== null ? f[cols.name] : "";
+        var un = cols.unit !== null ? f[cols.unit] : "";
+        by[id] = { name: nm || id, unit: un, points: {}, lo: mi, hi: mi };
+        order.push(id);
+      }
+      var rec = by[id];
+      if (has(rec.points, mi)) fail("dup_month", "Line " + ln + ": a month repeats for series " + id + ".");
+      rec.points[mi] = v;
+      if (mi < rec.lo) rec.lo = mi;
+      if (mi > rec.hi) rec.hi = mi;
+    }
+    if (order.length === 0) fail("empty", "No data rows found.");
+    var series = [];
+    for (var oi = 0; oi < order.length; oi++) {
+      var r = by[order[oi]];
+      if (r.hi - r.lo + 1 > MAX_POINTS_PER_SERIES) fail("too_long", "Series " + order[oi] + " has more than " + MAX_POINTS_PER_SERIES + " months.");
+      var vals = [];
+      for (var k = r.lo; k < r.hi + 1; k++) vals.push(has(r.points, k) ? r.points[k] : null);
+      series.push({ id: order[oi], name: r.name, unit: r.unit, group: classify(order[oi], r.name), start: formatMonth(r.lo), values: vals });
+    }
+    return validateDataset({ series: series });
+  }
+
+  return {
+    GROUPS: GROUPS, GROUP_LABELS: GROUP_LABELS, CODE_GROUPS: CODE_GROUPS, NAME_KEYWORDS: NAME_KEYWORDS, SPREADS: SPREADS,
+    MAX_CSV_ROWS: MAX_CSV_ROWS, AnalyticsError: AnalyticsError,
+    parseMonth: parseMonth, formatMonth: formatMonth, monthAdd: monthAdd, monthDiff: monthDiff,
+    valueAt: valueAt, endMonth: endMonth, lastIndex: lastIndex,
+    pctChange: pctChange, absChange: absChange, zscore: zscore, percentile: percentile, summarize: summarize,
+    rebase: rebase, window: windowOf, combine: combine, findSeries: findSeries, spreads: spreads, movers: movers,
+    classify: classify, roundHalfAway: roundHalfAway, formatValue: formatValue, formatPct: formatPct,
+    formatSigned: formatSigned, validateDataset: validateDataset, parseTidyCsv: parseTidyCsv, csvText: csvText
+  };
+})();
+</script>
+
+<script id="ui">
+(function () {
+  "use strict";
+  var MAX_FILE = 5 * 1024 * 1024;
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var SLOTS = ["s1", "s2", "s3", "s4"];
+  var COLORS = ["var(--chart-1)", "var(--chart-4)", "var(--series-3)", "var(--series-4)"];
+  var TAB_GROUPS = ["energy", "metals", "agriculture", "fertilizers", "other"];
+  var DEFAULT_PICKS = ["CRUDE_BRENT", "NGAS_EUR", "COPPER", "UREA_EE_BULK"];
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  var state = {
+    ds: null, meta: {}, mode: "snapshot", bundled: null, bundledMeta: {},
+    group: "energy", sort: "mom", picks: DEFAULT_PICKS.slice(), rebase: false, base: null,
+    from: null, to: null, first: null, last: null, rows: []
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, text) {
+    var e = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function svgEl(tag, attrs, text) {
+    var e = document.createElementNS(SVGNS, tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function store(k, v) { try { window.localStorage.setItem("commodity-pulse:" + k, v); } catch (e) { /* storage blocked */ } }
+  function recall(k) { try { return window.localStorage.getItem("commodity-pulse:" + k); } catch (e) { return null; } }
+  function monthLabel(m) {
+    if (!m) return "n/a";
+    return MONTHS[parseInt(m.slice(5, 7), 10) - 1] + " " + m.slice(0, 4);
+  }
+  function readJsonScript(id) {
+    try { return JSON.parse($(id).textContent || "{}"); } catch (e) { return {}; }
+  }
+  function series(id) { return state.ds ? CP.findSeries(state.ds, id) : null; }
+  function isPlain(o) { return o !== null && typeof o === "object" && !Array.isArray(o); }
+
+  // ---------------------------------------------------------------- data in
+  function setData(ds, meta, mode) {
+    state.ds = ds;
+    state.meta = meta || {};
+    state.mode = mode;
+    var first = null, last = null;
+    ds.series.forEach(function (s) {
+      var a = CP.parseMonth(s.start), b = a + s.values.length - 1;
+      if (first === null || a < first) first = a;
+      if (last === null || b > last) last = b;
+    });
+    state.first = CP.formatMonth(first);
+    state.last = CP.formatMonth(last);
+    var have = state.picks.filter(function (id) { return id && series(id); });
+    if (have.length === 0) {
+      have = DEFAULT_PICKS.filter(function (id) { return series(id); });
+      if (have.length === 0) have = [ds.series[0].id];
+    }
+    state.picks = [have[0] || "", have[1] || "", have[2] || "", have[3] || ""];
+    var span = last - first + 1;
+    state.from = CP.formatMonth(span > 120 ? last - 119 : first);
+    state.to = state.last;
+    state.base = state.from;
+    var groups = {};
+    ds.series.forEach(function (s) { groups[s.group] = true; });
+    if (!groups[state.group]) state.group = TAB_GROUPS.filter(function (g) { return groups[g]; })[0] || "energy";
+    renderAll();
+  }
+
+  function describeData() {
+    var m = state.meta || {};
+    var n = state.ds.series.length;
+    var span = monthLabel(state.first) + " to " + monthLabel(state.last);
+    var rel = m.release ? formatDate(m.release) : null;
+    var note = $("data-note"), chip = $("chip-mode"), banner = $("data-banner");
+    banner.hidden = true;
+    if (state.mode === "live") {
+      chip.textContent = "Live from repo";
+      chip.className = "chip good";
+      note.textContent = n + " series, " + span + "." + (rel ? " World Bank release of " + rel + "." : "") +
+        (m.fetched_at ? " Checked " + String(m.fetched_at).slice(0, 10) + "." : "");
+      if (m.seed) {
+        banner.hidden = false;
+        banner.textContent = "Seed data: " + n + " series transcribed from the Pink Sheet PDFs, " + span +
+          ". The weekly collector replaces it with the full history back to 1960 on its first run.";
+      }
+    } else if (state.mode === "file") {
+      chip.textContent = "Your file";
+      chip.className = "chip warn";
+      note.textContent = n + " series, " + span + ", from a file you loaded. Not checked against the World Bank source.";
+    } else {
+      chip.textContent = "Snapshot";
+      chip.className = "chip muted";
+      note.textContent = "Snapshot as of " + (rel ? "the " + rel + " release" : "a past release") +
+        ". The GitHub version updates automatically. " + n + " series, " + span + ".";
+      if (m.seed) {
+        banner.hidden = false;
+        banner.textContent = "Real World Bank values for " + span + " (the months printed in five Pink Sheet editions). " +
+          "Percentiles here rank against those " + monthsBetween(state.first, state.last) +
+          " months only. The GitHub version carries full history back to 1960.";
+      }
+      if (state.liveError) {
+        banner.hidden = false;
+        banner.className = "banner bad";
+        banner.textContent = "Could not load the repo's data (" + state.liveError + "). Showing the bundled snapshot.";
+      }
+    }
+  }
+  function monthsBetween(a, b) { return CP.monthDiff(b, a) + 1; }
+  function formatDate(iso) {
+    var p = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(iso));
+    if (!p) return String(iso);
+    var full = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return full[parseInt(p[2], 10) - 1] + " " + parseInt(p[3], 10) + ", " + p[1];
+  }
+
+  // ---------------------------------------------------------------- render
+  function renderAll() {
+    describeData();
+    renderTops();
+    renderTabs();
+    renderMovers();
+    fillPickers();
+    fillRange();
+    renderChart();
+    renderSpreads();
+  }
+
+  function chg(v, kind) { return kind === "abs" ? CP.formatSigned(v) : CP.formatPct(v); }
+  function arrow(v) { return v === null ? "" : (v > 0 ? "▲" : (v < 0 ? "▼" : "")); }
+
+  function renderTops() {
+    [["mom", "top-mom"], ["yoy", "top-yoy"]].forEach(function (p) {
+      var ol = $(p[1]);
+      ol.replaceChildren();
+      var rows = CP.movers(state.ds, null, p[0], 5).filter(function (r) { return r[p[0]] !== null; });
+      if (rows.length === 0) {
+        ol.appendChild(el("li", null, p[0] === "yoy" ? "Needs 13 months of history." : "Needs 2 months of history."));
+        return;
+      }
+      rows.forEach(function (r) {
+        var li = el("li");
+        var nm = el("span", { "class": "nm" });
+        var b = el("button", { type: "button", "class": "link" }, r.name);
+        b.addEventListener("click", function () { addPick(r.id); });
+        nm.appendChild(b);
+        nm.appendChild(el("span", { "class": "meta" }, CP.formatValue(r.value) + " " + r.unit + ", " + monthLabel(r.date)));
+        li.appendChild(nm);
+        li.appendChild(el("span", { "class": "chg" }, arrow(r[p[0]]) + " " + CP.formatPct(r[p[0]])));
+        ol.appendChild(li);
+      });
+    });
+    var latest = null;
+    state.ds.series.forEach(function (s) {
+      var i = CP.lastIndex(s);
+      if (i >= 0) { var m = CP.monthAdd(s.start, i); if (latest === null || CP.monthDiff(m, latest) > 0) latest = m; }
+    });
+    $("chip-month").textContent = "Latest " + monthLabel(latest);
+  }
+
+  function renderTabs() {
+    var tabs = $("tabs");
+    tabs.replaceChildren();
+    var counts = {};
+    state.ds.series.forEach(function (s) { counts[s.group] = (counts[s.group] || 0) + 1; });
+    TAB_GROUPS.forEach(function (g) {
+      if (g === "other" && !counts.other) return;
+      var b = el("button", { type: "button", role: "tab", id: "tab-" + g, "aria-controls": "group-panel",
+        "aria-selected": String(g === state.group), tabindex: g === state.group ? "0" : "-1" });
+      b.appendChild(document.createTextNode(CP.GROUP_LABELS[g]));
+      b.appendChild(el("span", { "class": "count" }, String(counts[g] || 0)));
+      b.addEventListener("click", function () { selectTab(g, false); });
+      b.addEventListener("keydown", function (ev) {
+        var list = Array.prototype.slice.call(tabs.querySelectorAll("[role=tab]"));
+        var i = list.indexOf(b), j = -1;
+        if (ev.key === "ArrowRight") j = (i + 1) % list.length;
+        else if (ev.key === "ArrowLeft") j = (i - 1 + list.length) % list.length;
+        else if (ev.key === "Home") j = 0;
+        else if (ev.key === "End") j = list.length - 1;
+        if (j >= 0) { ev.preventDefault(); selectTab(list[j].id.slice(4), true); }
+      });
+      tabs.appendChild(b);
+    });
+    $("group-panel").setAttribute("aria-labelledby", "tab-" + state.group);
+  }
+  function selectTab(g, focus) {
+    state.group = g;
+    store("group", g);
+    Array.prototype.forEach.call($("tabs").querySelectorAll("[role=tab]"), function (b) {
+      var on = b.id === "tab-" + g;
+      b.setAttribute("aria-selected", String(on));
+      b.setAttribute("tabindex", on ? "0" : "-1");
+    });
+    $("group-panel").setAttribute("aria-labelledby", "tab-" + g);
+    renderMovers();
+    if (focus) $("tab-" + g).focus();
+  }
+
+  function moverRows() {
+    if (state.sort === "name") return CP.movers({ series: state.ds.series.filter(function (s) { return s.group === state.group; }) }, null, "mom", null)
+      .sort(function (a, b) { return orderOf(a.id) - orderOf(b.id); });
+    return CP.movers(state.ds, state.group, state.sort, null);
+  }
+  function orderOf(id) {
+    for (var i = 0; i < state.ds.series.length; i++) if (state.ds.series[i].id === id) return i;
+    return 0;
+  }
+
+  function renderMovers() {
+    var body = $("movers-body");
+    body.replaceChildren();
+    var rows = moverRows();
+    state.rows = rows;
+    $("movers-caption").textContent = "Latest values and changes, " + CP.GROUP_LABELS[state.group];
+    if (rows.length === 0) {
+      var tr0 = el("tr"), td0 = el("td", { colspan: "8" }, "No series in this group.");
+      tr0.appendChild(td0);
+      body.appendChild(tr0);
+      return;
+    }
+    rows.forEach(function (r) {
+      var tr = el("tr");
+      var td = el("td");
+      var b = el("button", { type: "button", "class": "link" }, r.name);
+      b.addEventListener("click", function () { addPick(r.id); });
+      td.appendChild(b);
+      tr.appendChild(td);
+      tr.appendChild(el("td", { "class": "u" }, r.unit));
+      tr.appendChild(el("td", { "class": "n" }, r.date || "n/a"));
+      tr.appendChild(el("td", { "class": "n" }, CP.formatValue(r.value)));
+      tr.appendChild(el("td", { "class": "n" }, CP.formatPct(r.mom)));
+      tr.appendChild(el("td", { "class": "n" }, CP.formatPct(r.yoy)));
+      tr.appendChild(el("td", { "class": "n" }, r.z12 === null ? "n/a" : CP.formatSigned(r.z12)));
+      var pc = el("td", { "class": "n" });
+      if (r.pct !== null) {
+        var bar = el("span", { "class": "pbar", "aria-hidden": "true" });
+        var tick = el("i");
+        tick.style.left = "calc(" + Math.max(0, Math.min(100, r.pct)).toFixed(1) + "% - 1.5px)";
+        bar.appendChild(tick);
+        pc.appendChild(bar);
+      }
+      pc.appendChild(document.createTextNode(r.pct === null ? "n/a" : CP.roundHalfAway(r.pct, 0)));
+      tr.appendChild(pc);
+      body.appendChild(tr);
+    });
+  }
+
+  function csvCell(s) {
+    s = String(s);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function moversCsv() {
+    var out = ["group,series_id,name,unit,month,price,mom_pct,yoy_pct,z12,percentile"];
+    state.rows.forEach(function (r) {
+      out.push([CP.csvText(r.group), CP.csvText(r.id), CP.csvText(r.name), CP.csvText(r.unit), r.date || "", r.value === null ? "" : String(r.value),
+        r.mom === null ? "" : CP.roundHalfAway(r.mom, 4), r.yoy === null ? "" : CP.roundHalfAway(r.yoy, 4),
+        r.z12 === null ? "" : CP.roundHalfAway(r.z12, 4), r.pct === null ? "" : CP.roundHalfAway(r.pct, 2)].map(csvCell).join(","));
+    });
+    return out.join("\n") + "\n";
+  }
+  function copyCsv() {
+    var text = moversCsv(), msg = $("copy-msg"), ta = $("copy-fallback");
+    function fallback() {
+      ta.value = text;
+      ta.hidden = false;
+      ta.focus();
+      ta.select();
+      msg.hidden = false;
+      msg.className = "msg";
+      msg.textContent = "Clipboard not available. The CSV is selected above; copy it with your keyboard.";
+    }
+    if (!navigator.clipboard || !navigator.clipboard.writeText) { fallback(); return; }
+    navigator.clipboard.writeText(text).then(function () {
+      ta.hidden = true;
+      msg.hidden = false;
+      msg.className = "msg";
+      msg.textContent = "Copied " + state.rows.length + " rows as CSV.";
+    }).catch(fallback);
+  }
+
+  // ---------------------------------------------------------------- chart controls
+  function fillPickers() {
+    SLOTS.forEach(function (slot, i) {
+      var sel = $(slot);
+      sel.replaceChildren();
+      sel.appendChild(el("option", { value: "" }, i === 0 ? "Pick a series" : "None"));
+      TAB_GROUPS.forEach(function (g) {
+        var members = state.ds.series.filter(function (s) { return s.group === g; });
+        if (!members.length) return;
+        var og = el("optgroup", { label: CP.GROUP_LABELS[g] });
+        members.forEach(function (s) { og.appendChild(el("option", { value: s.id }, s.name + (s.unit ? " (" + s.unit + ")" : ""))); });
+        sel.appendChild(og);
+      });
+      sel.value = state.picks[i] || "";
+    });
+  }
+  function monthOptions(sel, first, last, value) {
+    sel.replaceChildren();
+    var a = CP.parseMonth(first), b = CP.parseMonth(last);
+    for (var k = b; k >= a; k--) {
+      var m = CP.formatMonth(k);
+      sel.appendChild(el("option", { value: m }, m));
+    }
+    sel.value = value;
+  }
+  function fillRange() {
+    monthOptions($("range-from"), state.first, state.last, state.from);
+    monthOptions($("range-to"), state.first, state.last, state.to);
+    monthOptions($("base-month"), state.from, state.to, state.base);
+    var span = monthsBetween(state.from, state.to), total = monthsBetween(state.first, state.last);
+    ["rng-12", "rng-60", "rng-120", "rng-all"].forEach(function (id) {
+      var n = parseInt($(id).getAttribute("data-months"), 10);
+      var on = n === 0 ? (state.from === state.first && state.to === state.last) : (span === n && state.to === state.last);
+      $(id).setAttribute("aria-pressed", String(on));
+      $(id).disabled = n > 0 && n > total;
+    });
+  }
+  function addPick(id) {
+    if (state.picks.indexOf(id) >= 0) { $("chart-title").scrollIntoView({ block: "start" }); return; }
+    var i = state.picks.indexOf("");
+    if (i < 0) i = 3;
+    state.picks[i] = id;
+    fillPickers();
+    renderChart();
+    $("chart-title").scrollIntoView({ block: "start" });
+  }
+
+  // ---------------------------------------------------------------- chart
+  function niceTicks(lo, hi, count) {
+    if (!(hi > lo)) { var pad = Math.abs(lo) * 0.05 || 1; lo -= pad; hi += pad; }
+    var raw = (hi - lo) / Math.max(count, 1);
+    var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var step = mag;
+    [1, 2, 2.5, 5, 10].some(function (m) { if (m * mag >= raw) { step = m * mag; return true; } return false; });
+    var t0 = Math.floor(lo / step) * step, t1 = Math.ceil(hi / step) * step, ticks = [];
+    for (var t = t0; t <= t1 + step * 1e-9; t += step) ticks.push(Math.abs(t) < step * 1e-9 ? 0 : t);
+    return { lo: t0, hi: t1, ticks: ticks, step: step };
+  }
+  function tickLabel(v, step) {
+    var d = step >= 1 ? 0 : (step >= 0.1 ? 1 : (step >= 0.01 ? 2 : 3));
+    if (Math.abs(v) >= 1000 && d === 0) return CP.formatValue(v);
+    return CP.roundHalfAway(v, d);
+  }
+
+  function chartModel() {
+    var picks = [];
+    state.picks.forEach(function (id, i) {
+      var s = id ? series(id) : null;
+      if (s) picks.push({ slot: i, s: s });
+    });
+    var units = {};
+    picks.forEach(function (p) { units[p.s.unit] = true; });
+    var mixed = Object.keys(units).length > 1;
+    var rebased = state.rebase || mixed;
+    var lines = picks.map(function (p) {
+      var src = rebased ? CP.rebase(p.s, state.base) : p.s;
+      var w = CP.window(src, state.from, state.to);
+      return { slot: p.slot, s: p.s, values: w.values };
+    });
+    return { lines: lines, mixed: mixed, rebased: rebased, n: monthsBetween(state.from, state.to) };
+  }
+
+  function renderChart() {
+    var model = chartModel();
+    var note = $("chart-note"), svg = $("chart"), legend = $("legend");
+    var notes = [];
+    if (model.mixed && !state.rebase) notes.push("Units differ, so the chart is rebased to 100 at the base month.");
+    var missingBase = model.rebased && model.lines.filter(function (l) { return CP.valueAt(l.s, state.base) === null; });
+    if (missingBase && missingBase.length) notes.push("No value at " + state.base + " for: " + missingBase.map(function (l) { return l.s.name; }).join(", ") + ". Pick another base month.");
+    note.textContent = notes.join(" ");
+    note.hidden = notes.length === 0;
+    $("rebase").checked = model.rebased;
+    $("rebase").disabled = model.mixed;
+    $("base-month").disabled = !model.rebased;
+
+    legend.replaceChildren();
+    model.lines.forEach(function (l) {
+      var sp = el("span");
+      var sw = el("span", { "class": "swatch" });
+      sw.style.background = COLORS[l.slot];
+      sp.appendChild(sw);
+      sp.appendChild(document.createTextNode(l.s.name + (model.rebased ? "" : " (" + l.s.unit + ")")));
+      legend.appendChild(sp);
+    });
+
+    var box = $("chart-box");
+    var W = Math.max(300, Math.floor(box.clientWidth || 700));
+    var H = W < 520 ? 240 : 320;
+    while (svg.lastChild && svg.lastChild.nodeName !== "desc") svg.removeChild(svg.lastChild);
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("width", String(W));
+    svg.setAttribute("height", String(H));
+    $("tip").hidden = true;
+
+    var lo = Infinity, hi = -Infinity;
+    model.lines.forEach(function (l) { l.values.forEach(function (v) { if (v !== null) { if (v < lo) lo = v; if (v > hi) hi = v; } }); });
+    if (!isFinite(lo)) {
+      svg.appendChild(svgEl("text", { x: String(W / 2), y: String(H / 2), "text-anchor": "middle", "class": "ax" },
+        model.lines.length ? "No values in this range." : "Pick a series to chart."));
+      renderChartTable(model);
+      return;
+    }
+    var directLabels = W >= 560 && model.lines.length > 0;
+    var M = { l: 54, r: directLabels ? 132 : 14, t: 12, b: 26 };
+    if (model.rebased) { lo = Math.min(lo, 100); hi = Math.max(hi, 100); }
+    var yt = niceTicks(lo, hi, H < 300 ? 4 : 6);
+    var pw = W - M.l - M.r, ph = H - M.t - M.b, n = model.n;
+    function X(i) { return M.l + (n <= 1 ? pw / 2 : i / (n - 1) * pw); }
+    function Y(v) { return M.t + (yt.hi - v) / (yt.hi - yt.lo) * ph; }
+
+    yt.ticks.forEach(function (t) {
+      var y = Y(t).toFixed(1);
+      svg.appendChild(svgEl("line", { x1: String(M.l), x2: String(M.l + pw), y1: y, y2: y, "class": "grid" }));
+      svg.appendChild(svgEl("text", { x: String(M.l - 8), y: String(+y + 4), "text-anchor": "end", "class": "ax" }, tickLabel(t, yt.step)));
+    });
+    svg.appendChild(svgEl("line", { x1: String(M.l), x2: String(M.l + pw), y1: String(M.t + ph), y2: String(M.t + ph), "class": "base" }));
+    if (model.rebased && yt.lo < 100 && yt.hi > 100) {
+      var y100 = Y(100).toFixed(1);
+      svg.appendChild(svgEl("line", { x1: String(M.l), x2: String(M.l + pw), y1: y100, y2: y100, "class": "ref" }));
+    }
+
+    // x ticks: years, months for short ranges
+    var maxTicks = Math.max(2, Math.floor(pw / 70));
+    var startIdx = CP.parseMonth(state.from);
+    var stepM = n <= 18 ? Math.max(1, Math.ceil(n / maxTicks)) : 12 * Math.max(1, Math.ceil(n / 12 / maxTicks));
+    [1, 2, 5, 10].some(function (m) { if (n > 18 && 12 * m >= stepM) { stepM = 12 * m; return true; } return false; });
+    for (var i = 0; i < n; i++) {
+      var mi = startIdx + i, mo = mi % 12, yr = Math.floor(mi / 12);
+      var on = n <= 18 ? (i % stepM === 0) : (mo === 0 && yr % (stepM / 12) === 0);
+      if (!on) continue;
+      var lab = n <= 18 ? MONTHS[mo] + (mo === 0 || i === 0 ? " " + String(yr).slice(2) : "") : String(yr);
+      var x = X(i);
+      svg.appendChild(svgEl("line", { x1: x.toFixed(1), x2: x.toFixed(1), y1: String(M.t + ph), y2: String(M.t + ph + 4), "class": "base" }));
+      var anchor = x < M.l + 16 ? "start" : (x > M.l + pw - 16 ? "end" : "middle");
+      svg.appendChild(svgEl("text", { x: x.toFixed(1), y: String(M.t + ph + 18), "text-anchor": anchor, "class": "ax" }, lab));
+    }
+
+    var ends = [];
+    model.lines.forEach(function (l) {
+      var d = "", pen = false, lastI = -1;
+      l.values.forEach(function (v, k) {
+        if (v === null) { pen = false; return; }
+        d += (pen ? "L" : "M") + X(k).toFixed(1) + "," + Y(v).toFixed(1);
+        pen = true;
+        lastI = k;
+      });
+      var path = svgEl("path", { d: d, "class": "ln" });
+      path.style.stroke = COLORS[l.slot];
+      svg.appendChild(path);
+      var solo = l.values.filter(function (v) { return v !== null; }).length === 1;
+      if (solo || n <= 24) {
+        l.values.forEach(function (v, k) {
+          if (v === null) return;
+          var c = svgEl("circle", { cx: X(k).toFixed(1), cy: Y(v).toFixed(1), r: "3", "class": "dot" });
+          c.style.fill = COLORS[l.slot];
+          svg.appendChild(c);
+        });
+      }
+      if (lastI >= 0) ends.push({ y: Y(l.values[lastI]), x: X(lastI), l: l, v: l.values[lastI] });
+    });
+
+    if (directLabels) {
+      ends.sort(function (a, b) { return a.y - b.y; });
+      var gap = 15;
+      for (var e = 1; e < ends.length; e++) if (ends[e].y - ends[e - 1].y < gap) ends[e].y = ends[e - 1].y + gap;
+      var over = ends.length ? ends[ends.length - 1].y - (M.t + ph) : 0;
+      if (over > 0) ends.forEach(function (q) { q.y -= over; });
+      ends.forEach(function (q) {
+        var name = q.l.s.name.length > 17 ? q.l.s.name.slice(0, 16) + "…" : q.l.s.name;
+        var t = svgEl("text", { x: String(M.l + pw + 8), y: (q.y + 4).toFixed(1), "class": "dl" }, name);
+        svg.appendChild(t);
+      });
+    }
+
+    // hover layer
+    var xh = svgEl("line", { y1: String(M.t), y2: String(M.t + ph), "class": "xh", visibility: "hidden" });
+    svg.appendChild(xh);
+    var dots = model.lines.map(function (l) {
+      var c = svgEl("circle", { r: "4.5", "class": "dot", visibility: "hidden" });
+      c.style.fill = COLORS[l.slot];
+      svg.appendChild(c);
+      return c;
+    });
+    var hit = svgEl("rect", { x: String(M.l), y: String(M.t), width: String(pw), height: String(ph), "class": "hit" });
+    svg.appendChild(hit);
+    function move(ev) {
+      var r = svg.getBoundingClientRect();
+      var px = (ev.clientX - r.left) * (W / r.width);
+      var k = n <= 1 ? 0 : Math.round((px - M.l) / pw * (n - 1));
+      k = Math.max(0, Math.min(n - 1, k));
+      var x = X(k);
+      xh.setAttribute("x1", x.toFixed(1)); xh.setAttribute("x2", x.toFixed(1));
+      xh.setAttribute("visibility", "visible");
+      var tip = $("tip");
+      tip.replaceChildren();
+      tip.appendChild(el("b", null, monthLabel(CP.monthAdd(state.from, k))));
+      model.lines.forEach(function (l, j) {
+        var v = l.values[k];
+        if (v === null) { dots[j].setAttribute("visibility", "hidden"); }
+        else {
+          dots[j].setAttribute("cx", x.toFixed(1)); dots[j].setAttribute("cy", Y(v).toFixed(1));
+          dots[j].setAttribute("visibility", "visible");
+        }
+        var row = el("div");
+        var nm = el("span");
+        var sw = el("span", { "class": "swatch" });
+        sw.style.background = COLORS[l.slot];
+        nm.appendChild(sw);
+        nm.appendChild(document.createTextNode(l.s.name));
+        row.appendChild(nm);
+        row.appendChild(el("span", { "class": "v" }, v === null ? "n/a" : (model.rebased ? CP.roundHalfAway(v, 1) : CP.formatValue(v) + " " + l.s.unit)));
+        tip.appendChild(row);
+      });
+      tip.hidden = false;
+      var bw = box.clientWidth, tw = tip.offsetWidth;
+      var left = (x / W) * r.width + 14;
+      if (left + tw > bw) left = Math.max(0, (x / W) * r.width - tw - 14);
+      tip.style.left = left + "px";
+      tip.style.top = "8px";
+    }
+    function leave() {
+      xh.setAttribute("visibility", "hidden");
+      dots.forEach(function (d) { d.setAttribute("visibility", "hidden"); });
+      $("tip").hidden = true;
+    }
+    hit.addEventListener("pointermove", move);
+    hit.addEventListener("pointerdown", move);
+    hit.addEventListener("pointerleave", leave);
+    renderChartTable(model);
+  }
+
+  function renderChartTable(model) {
+    var th = $("chart-thead"), tb = $("chart-tbody");
+    th.replaceChildren(); tb.replaceChildren();
+    var tr = el("tr");
+    tr.appendChild(el("th", { scope: "col" }, "Month"));
+    model.lines.forEach(function (l) { tr.appendChild(el("th", { scope: "col", "class": "n" }, l.s.name + (model.rebased ? " (base 100)" : " (" + l.s.unit + ")"))); });
+    th.appendChild(tr);
+    for (var k = model.n - 1; k >= 0; k--) {
+      var r = el("tr");
+      r.appendChild(el("td", { "class": "n" }, CP.monthAdd(state.from, k)));
+      model.lines.forEach(function (l) {
+        var v = l.values[k];
+        r.appendChild(el("td", { "class": "n" }, v === null ? "" : (model.rebased ? CP.roundHalfAway(v, 2) : CP.formatValue(v))));
+      });
+      tb.appendChild(r);
+    }
+  }
+
+  // ---------------------------------------------------------------- spreads
+  function renderSpreads() {
+    var wrap = $("spreads");
+    wrap.replaceChildren();
+    $("chip-spread-range").textContent = state.from + " to " + state.to;
+    var list = CP.spreads(state.ds);
+    if (list.length === 0) {
+      wrap.appendChild(el("p", { "class": "hint" }, "The loaded data has none of the series these spreads need."));
+      return;
+    }
+    list.forEach(function (sp) {
+      var m = sp.summary, card = el("div", { "class": "spread" });
+      card.appendChild(el("span", { "class": "k" }, sp.label));
+      var v = el("span", { "class": "v" }, CP.formatValue(m.value));
+      v.appendChild(el("small", null, sp.unit + (m.date ? ", " + monthLabel(m.date) : "")));
+      card.appendChild(v);
+      var d = el("span", { "class": "d" });
+      d.appendChild(el("span", null, "MoM " + chg(m.mom, "abs")));
+      d.appendChild(el("span", null, "YoY " + chg(m.yoy, "abs")));
+      d.appendChild(el("span", null, "z " + (m.z12 === null ? "n/a" : CP.formatSigned(m.z12))));
+      d.appendChild(el("span", null, "pctl " + (m.pct === null ? "n/a" : CP.roundHalfAway(m.pct, 0))));
+      card.appendChild(d);
+      card.appendChild(sparkline(CP.window(sp.series, state.from, state.to).values, sp.label));
+      wrap.appendChild(card);
+    });
+  }
+  function sparkline(vals, label) {
+    var W = 220, H = 44, P = 5;
+    var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "none", role: "img", "aria-label": label + " over the chart range" });
+    var lo = Infinity, hi = -Infinity, lastK = -1;
+    vals.forEach(function (v, k) { if (v !== null) { lo = Math.min(lo, v); hi = Math.max(hi, v); lastK = k; } });
+    if (lastK < 0) return svg;
+    if (hi === lo) { hi += 1; lo -= 1; }
+    var n = vals.length;
+    function X(k) { return n <= 1 ? W / 2 : P + k / (n - 1) * (W - 2 * P); }
+    function Y(v) { return P + (hi - v) / (hi - lo) * (H - 2 * P); }
+    var d = "", pen = false;
+    vals.forEach(function (v, k) {
+      if (v === null) { pen = false; return; }
+      d += (pen ? "L" : "M") + X(k).toFixed(1) + "," + Y(v).toFixed(1);
+      pen = true;
+    });
+    var p = svgEl("path", { d: d, "class": "spark", "vector-effect": "non-scaling-stroke" });
+    svg.appendChild(p);
+    return svg;
+  }
+
+  // ---------------------------------------------------------------- events
+  SLOTS.forEach(function (slot, i) {
+    $(slot).addEventListener("change", function () {
+      state.picks[i] = $(slot).value;
+      renderChart();
+    });
+  });
+  $("rebase").addEventListener("change", function () { state.rebase = $("rebase").checked; renderChart(); });
+  $("base-month").addEventListener("change", function () { state.base = $("base-month").value; renderChart(); });
+  function setRange(from, to) {
+    if (CP.monthDiff(to, from) < 0) { var t = from; from = to; to = t; }
+    state.from = from; state.to = to;
+    if (CP.monthDiff(state.base, from) < 0 || CP.monthDiff(state.base, to) > 0) state.base = from;
+    fillRange();
+    renderChart();
+    renderSpreads();
+  }
+  $("range-from").addEventListener("change", function () { setRange($("range-from").value, state.to); });
+  $("range-to").addEventListener("change", function () { setRange(state.from, $("range-to").value); });
+  ["rng-12", "rng-60", "rng-120", "rng-all"].forEach(function (id) {
+    $(id).addEventListener("click", function () {
+      var n = parseInt($(id).getAttribute("data-months"), 10);
+      if (n === 0) { setRange(state.first, state.last); return; }
+      var from = CP.monthAdd(state.last, -(n - 1));
+      if (CP.monthDiff(from, state.first) < 0) from = state.first;
+      setRange(from, state.last);
+    });
+  });
+  $("movers-sort").addEventListener("change", function () { state.sort = $("movers-sort").value; store("sort", state.sort); renderMovers(); });
+  $("btn-copy").addEventListener("click", copyCsv);
+
+  function fileMsg(text, isErr) {
+    var m = $("file-msg");
+    m.textContent = text;
+    m.className = isErr ? "msg err" : "msg";
+    m.hidden = !text;
+  }
+  $("file-in").addEventListener("change", function () {
+    var f = $("file-in").files && $("file-in").files[0];
+    if (!f) return;
+    if (f.size > MAX_FILE) { fileMsg("That file is " + (f.size / 1048576).toFixed(1) + " MB. The limit is 5 MB.", true); return; }
+    var rd = new FileReader();
+    rd.addEventListener("load", function () {
+      var text = String(rd.result || ""), ds;
+      try {
+        var t = text.replace(/^﻿/, "").replace(/^\s+/, "");
+        if (t.charAt(0) === "{") {
+          var obj;
+          try { obj = JSON.parse(t); } catch (e) { fileMsg("That file starts like JSON but does not parse: " + e.message, true); return; }
+          ds = CP.validateDataset(obj);
+        } else {
+          ds = CP.parseTidyCsv(text);
+        }
+      } catch (e) {
+        if (e instanceof CP.AnalyticsError) { fileMsg(e.message, true); return; }
+        throw e;
+      }
+      fileMsg("Loaded " + ds.series.length + " series from your file.", false);
+      setData(ds, {}, "file");
+    });
+    rd.addEventListener("error", function () { fileMsg("Could not read that file.", true); });
+    rd.readAsText(f);
+  });
+  $("btn-reset").addEventListener("click", function () {
+    $("file-in").value = "";
+    fileMsg("", false);
+    setData(state.bundled, state.bundledMeta, state.bundledMode);
+  });
+
+  var resizeTimer = null;
+  if (typeof ResizeObserver === "function") {
+    var lastW = 0;
+    new ResizeObserver(function () {
+      var w = $("chart-box").clientWidth;
+      if (Math.abs(w - lastW) < 2) return;
+      lastW = w;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { if (state.ds) renderChart(); }, 80);
+    }).observe($("chart-box"));
+  }
+
+  // ---------------------------------------------------------------- boot
+  var g0 = recall("group");
+  if (g0 && TAB_GROUPS.indexOf(g0) >= 0) state.group = g0;
+  var s0 = recall("sort");
+  if (s0 === "mom" || s0 === "yoy" || s0 === "name") { state.sort = s0; $("movers-sort").value = s0; }
+
+  function bootSnapshot() {
+    var snap = readJsonScript("snapshot");
+    try {
+      state.bundled = CP.validateDataset(snap);
+    } catch (e) {
+      $("data-note").textContent = "The bundled data snapshot is missing or invalid.";
+      return;
+    }
+    var sm = readJsonScript("snapshot-meta");
+    state.bundledMeta = isPlain(sm) ? sm : {};
+    state.bundledMode = "snapshot";
+    setData(state.bundled, state.bundledMeta, "snapshot");
+  }
+
+  // The GitHub Pages build (web/build_pages.py) adds a loader that reads the
+  // collector's data/ files from the same origin and exposes a promise here.
+  // web/app.html itself makes no network requests.
+  var live = window.COMMODITY_PULSE_LIVE;
+  if (live && typeof live.then === "function") {
+    $("data-note").textContent = "Loading the latest data from this site.";
+    live.then(function (res) {
+      var ds = CP.validateDataset(res.monthly);
+      state.bundled = ds;
+      state.bundledMeta = isPlain(res.meta) ? res.meta : {};
+      state.bundledMode = "live";
+      setData(ds, state.bundledMeta, "live");
+    }).catch(function (e) {
+      state.liveError = e && e.message ? String(e.message).slice(0, 80) : "unknown error";
+      bootSnapshot();
+    });
+  } else {
+    bootSnapshot();
+  }
+})();
+</script>
+</body>
+</html>

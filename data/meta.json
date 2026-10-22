@@ -1,0 +1,65 @@
+{
+  "source": "World Bank Commodity Price Data (The Pink Sheet), monthly",
+  "source_page": "https://www.worldbank.org/en/research/commodity-markets",
+  "source_url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-October-2026.pdf",
+  "release": "2026-10-02",
+  "latest_month": "2026-09",
+  "fetched_at": "2026-10-21T00:00:00+00:00",
+  "series_count": 38,
+  "sha256": "b78cf4a939f7826205326a1766503b54c6091dd3e848040cda99960e37562a33",
+  "license": {
+    "name": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "url": "https://datacatalog.worldbank.org/public-licenses?fragment=cc",
+    "dataset_url": "https://datacatalog.worldbank.org/search/dataset/0038238/commodity-prices-history-and-projections",
+    "attribution": "Source: World Bank, Commodity Price Data (The Pink Sheet), https://www.worldbank.org/en/research/commodity-markets. Licensed under CC BY 4.0. Reformatted and derived statistics computed by Commodity Pulse; the World Bank does not endorse this tool."
+  },
+  "seed": true,
+  "note": "Seed: monthly averages transcribed from five Pink Sheet PDF editions (July 2025 to September 2026). The collector replaces this with the full workbook.",
+  "editions": [
+    {
+      "months": [
+        "2025-07",
+        "2025-08",
+        "2025-09"
+      ],
+      "published": "2025-10-02",
+      "url": "https://thedocs.worldbank.org/en/doc/18675f1d1639c7a34d463f59263ba0a2-0050012025/related/CMO-Pink-Sheet-October-2025.pdf"
+    },
+    {
+      "months": [
+        "2025-10",
+        "2025-11",
+        "2025-12"
+      ],
+      "published": "2026-01-06",
+      "url": "https://thedocs.worldbank.org/en/doc/18675f1d1639c7a34d463f59263ba0a2-0050012025/related/CMO-Pink-Sheet-January-2026.pdf"
+    },
+    {
+      "months": [
+        "2026-01",
+        "2026-02",
+        "2026-03"
+      ],
+      "published": "2026-04-02",
+      "url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-April-2026.pdf"
+    },
+    {
+      "months": [
+        "2026-04",
+        "2026-05",
+        "2026-06"
+      ],
+      "published": "2026-07-02",
+      "url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-July-2026.pdf"
+    },
+    {
+      "months": [
+        "2026-07",
+        "2026-08",
+        "2026-09"
+      ],
+      "published": "2026-10-02",
+      "url": "https://thedocs.worldbank.org/en/doc/74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/CMO-Pink-Sheet-October-2026.pdf"
+    }
+  ]
+}
