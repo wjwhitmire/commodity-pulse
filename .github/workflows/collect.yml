@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      pages: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -31,10 +32,12 @@ jobs:
       - name: Rebuild pages
         run: python web/build_pages.py
       - name: Commit if changed
+        id: commit
         run: |
           git add data docs
           if git diff --cached --quiet; then
             echo "No new release. Nothing to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -42,3 +45,11 @@ jobs:
           release=$(python -c "import json;print(json.load(open('data/meta.json')).get('release') or 'unknown')")
           git commit -m "Data: World Bank Pink Sheet release ${release}"
           git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      # Pages publishes docs/ from the main branch, but a push made with the Actions token
+      # does not start a Pages build. Without this step the site would keep the old data.
+      - name: Publish the new data on Pages
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent

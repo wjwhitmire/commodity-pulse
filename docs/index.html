@@ -90,7 +90,7 @@ button:hover { border-color: var(--fg); }
 button:disabled { cursor: default; opacity: .55; }
 button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 button.link {
-  min-height: 44px; display: inline-flex; align-items: center; background: none; border-color: transparent; color: var(--fg);
+  min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; background: none; border-color: transparent; color: var(--fg);
   padding: 0; text-align: left; font: 600 16px/1.3 var(--body); letter-spacing: 0;
   text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px;
 }
@@ -1246,7 +1246,26 @@ var CP = (function () {
     var notes = [];
     if (model.mixed && !state.rebase) notes.push("Units differ, so the chart is rebased to 100 at the base month.");
     var missingBase = model.rebased && model.lines.filter(function (l) { return CP.valueAt(l.s, state.base) === null; });
-    if (missingBase && missingBase.length) notes.push("No value at " + state.base + " for: " + missingBase.map(function (l) { return l.s.name; }).join(", ") + ". Pick another base month.");
+    if (missingBase && missingBase.length) {
+      // Move the base to the first month in the range where every picked series has a value.
+      var n0 = monthsBetween(state.from, state.to), found = null;
+      for (var k0 = 0; k0 < n0 && found === null; k0++) {
+        var m0 = CP.monthAdd(state.from, k0);
+        if (model.lines.every(function (l) { var v0 = CP.valueAt(l.s, m0); return v0 !== null && v0 !== 0; })) found = m0;
+      }
+      if (found !== null) {
+        var was = state.base;
+        state.base = found;
+        fillRange();
+        renderChart();
+        var nt = $("chart-note");
+        nt.textContent = (nt.textContent ? nt.textContent + " " : "") + "Base month moved from " + was + " to " + found +
+          ": " + missingBase.map(function (l) { return l.s.name; }).join(", ") + " had no value there. Change it below.";
+        nt.hidden = false;
+        return;
+      }
+      notes.push("No value at " + state.base + " for: " + missingBase.map(function (l) { return l.s.name; }).join(", ") + ", and no month in this range has a value for every series. Narrow the range or drop a series.");
+    }
     note.textContent = notes.join(" ");
     note.hidden = notes.length === 0;
     $("rebase").checked = model.rebased;

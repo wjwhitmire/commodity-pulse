@@ -39,6 +39,19 @@ jobs:
           python web/build_pages.py
           git diff --exit-code web/app.html docs/
 
+  published-site:
+    # Runs the collect job's steps on a saved workbook in a release-filled copy,
+    # serves docs/ under /commodity-pulse/ as branch Pages does, and tests the page.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: pip install -e .[dev] playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest -q tests/test_published_site.py
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:

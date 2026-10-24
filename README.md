@@ -25,8 +25,7 @@ The code in this repo is MIT licensed. The data in `data/` and `docs/data/` stay
 1. Push this repo to GitHub (public).
 2. Settings, Pages: Source "Deploy from a branch", branch `main`, folder `/docs`.
 3. Settings, Actions, General, Workflow permissions: leave "Read repository contents" as the default. The collect workflow asks for `contents: write` on its own job.
-4. Actions tab: enable workflows if GitHub asks, then run "collect" once with "Run workflow". The first run replaces the seed data with the full history and commits it.
-5. Replace `https://wjwhitmire.github.io/commodity-pulse/` in this README with the Pages URL.
+4. Actions tab: enable workflows if GitHub asks, then run "collect" once with "Run workflow". The first run replaces the seed data with the full history and commits it. After each commit of new data the job asks GitHub Pages to rebuild, because a push made with the Actions token does not start a Pages build on its own.
 
 The workflow then runs every Wednesday at 09:17 UTC. The World Bank usually publishes on the second business day of the month, so a new release shows up within a week.
 
@@ -97,7 +96,7 @@ Notation: `P_t` is the price in month t, using the latest month with a value.
 - For spreads and ratios, MoM and YoY are plain differences in the spread's own units, because a spread can be zero or negative.
 - 12-month z-score: `z = (P_t - mean) / sd` over the 12 months ending at t (t included). `sd` is the sample standard deviation, `sqrt(sum((x - mean)^2) / 11)`. Blank if any of the 12 months is missing or `sd = 0`.
 - Percentile against history: `100 x (count below P_t + 0.5 x count equal to P_t) / n`, over every non-missing month from the start through t (midrank convention).
-- Rebase: `R_t = P_t / P_base x 100`. Blank if the base month is missing or zero. The chart rebases automatically when the picked series have different units, so there is never a second y-axis.
+- Rebase: `R_t = P_t / P_base x 100`. Blank if the base month is missing or zero. The chart rebases automatically when the picked series have different units, so there is never a second y-axis. When a picked series has no value at the base month, the chart moves the base to the first month in the range where every picked series has one, and says so.
 - Spreads, month by month over the overlapping months:
   - Brent minus WTI ($/bbl)
   - Europe gas (TTF) minus US gas (Henry Hub) ($/mmbtu), and the ratio Europe / US
